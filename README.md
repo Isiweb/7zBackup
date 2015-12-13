@@ -9,20 +9,20 @@ There are a lot of compression tools out there but none of them have succeded in
 There are a few drawbacks though: mainly the unability by 7zip to select files on specific criteria and to bind several sources in one archive unless you do it manually (many have encountered the "Duplicated File Name" problem).
 So I decided to write this small script which acts, substantially, as a selection wrapper for 7zip.
 
-# What 7zbackup.ps1 IS
+## What 7zbackup.ps1 IS
 It allows you to select files to backup using mostly the criteria of their "Archive" attribute which helps in building up catalogs to backup for Full, Differential and Incremental strategy. In addition it extends the selection criteria with several directives. You can fine tune the directories to dig into and file types/names to include or exclude. 
 It prepares a list of files from which 7-Zip reads which files are to insert into archive
 It resolves the oddity of "Duplicate File Name" of 7Zip: with the proper usage of Junction points on NTFS file system the whole selection stays under one single root and all files in the list catalog report a relative path. It resets "Archive" attribute of archived files only if they're properly processed. This is relevant if you backup using differential and or incremental methods. It keeps your backup archives in order eliminating the "older" ones.
 It can help you cleaning up your directory structure from unwanted files ... in few words a small and free backup on-file solution.
 
-# What 7zbackup.ps1 IS NOT and what it can't do
+## What 7zbackup.ps1 IS NOT and what it can't do
 * It's NOT a disaster recovery tool.
 * It can't save the state of your running machine.
 * It can't save ACLs of files into archives
 * It can't perform any restore operation. If you need to restore any file simply use 7-zip File Manager to open the generated archive and extract files you need.
 * It can't replace any of your off-site backup strategies.
 
-# Please read. Please ...
+## Please read. Please ...
 **This script makes use of Junction points (or Symbolic Links for Windows Vista/7/2008) typically placed in C: drive (root). These NTFS objects are displayed as folders in your Explorer interface. If, for any reason, the script should interrupt abnormally, it's generated junction points or symbolic links,  may remain on disk. DO NOT USE WINDOWS EXPLORER TO DELETE JUNCTIONS OR SYMBOLIC LINKS AS IT TRAVERSES THE LINK AND MAY REMOVE YOUR REAL FILES AND FOLDERS.**
 
 * To remove a junction point use junction.exe with the -d switch. 
