@@ -1,0 +1,332 @@
+# ********************************************************************
+#  This is the 7zBackup Selection And Job Specification File
+# ********************************************************************
+#  TAG: prefix
+#
+#       The prefix to use to generate the archive name.
+#       If not defined then the archive name is generated using the
+#       rules held in the vars file. If yet missing is automatically
+#       generated using the computername.
+#
+#       Example 
+#       prefix=MYArchiveName
+#
+#		Default
+#		prefix=
+
+# ********************************************************************
+#  TAG: includesource
+#
+#       With this tag you can define which are the sources which hold
+#       the files to backup.
+#
+#       You can define each source on it's own line. Each source must
+#       be followed by a pipe character and an alias.
+#
+#       includesource=<target>|alias=<namedcontainer>
+#
+#       The goal of the alias is to provide a Junction label for the
+#       targeted source and, also, to provide a meaningful container
+#       name within the resulting compressed backup archive.
+#
+#       You can set as many sources as you want one per line
+#       There must be at least one
+#
+#       Example
+#       includesource=C:\Dir1|alias=Container1
+#       includesource=C:\Dir2\Subdir1|alias=Container2
+#       includesource=D:\Company\Documents|alias=Public
+#       includesource=\\someserver\somesharedfolder|alias=Remote (see note !!)
+#
+#       NOTE ! From version 1.8.0 of 7zbackup you can also specify
+#       UNC paths as sources for your backup but this is possible
+#       only if the script is ran on a Windows Vista / 7 / 2008
+#       computer.
+#
+#       Warning !!
+#       Do not specify sources that are already below a previously
+#       specified source as it will double backup your data.
+#
+#       Example 
+#       includesource=C:\Dir1|alias=Container1
+#       includesource=C:\Dir1\Subdir1|alias=Container2 <- WRONG !!!
+#
+#       Default
+#       includesource=
+
+# ********************************************************************
+#  TAG: emptydirs (optional)
+#  
+#       Specifies wether or not archive empty dirs too
+#       Empty dirs are not really archived. The script drops a dummy file
+#       into empty dirs to have it archived. After archiving dummy file
+#       is immediately removed.
+#
+#       This is a switch tag which means no value is associated
+#       to it. 
+#       If you uncomment this tag the scan process will not
+#       include empty dirs
+#
+#       Default
+#       emptydirs
+
+# ********************************************************************
+#  TAG: matchincludefiles (optional)
+#  
+#       Holds the regular expression to test file names against.
+#       Every file name (regardless their path) which match this
+#       regular expression will be selected and included in the backup
+#
+#       If you do not specify any matchincludefiles directive then
+#       the script will automatically select ALL files with respect
+#       to the MAIN include criteria which is the type of backup.
+#
+#       If you do specify a matchincludefile directive then only
+#       filenames matching this expression will be selected.
+#
+#       You can set as many sources as you want one per line
+#
+#       Example to backup only *.pst files
+#       matchincludefiles=.*\.pst$        
+#
+#       Example to backup only *.pst files AND *.txt files
+#       matchincludefiles=.*\.pst$|.*\.txt$
+#
+#       - OR -
+#       matchincludefiles=.*\.pst$
+#       matchincludefiles=.*\.txt$
+#        
+#       Default (all files are eligible for backup)
+#       matchincludefiles=
+
+# ********************************************************************
+#  TAG: matchexcludepath (optional)
+#  
+#       By design behavior 7backup will recurse all subdirectories
+#       for any given source.
+#       This may cause you to backup some "unwanted" directory which
+#       reside below the given source.
+#
+#       With this regular expression you can specify which paths have
+#       to be skipped.
+#
+#       Imagine you have set D:\Dir1 as source and this directory
+#       holds severals subdirs like this
+#       D:\Dir1 == aliased as "Container1"
+#              \Dir1.1
+#              \Dir1.2
+#              \Dir1.3
+#                     \Dir1.3.1
+#              \Dir1.4
+#
+#       and you do not want to backup Dir1.3 you can specify a regular
+#       expression like this: 
+#
+#       matchexcludepath=^Container1\\Dir1\.3
+#
+#       This wont stop the digging to further subfolders but obviuosly
+#       every subfolder path will match the expression.
+#       On the other hand if you want to skip the backup of folder
+#       Dir1.3 ONLY and want to let the selection process to go further
+#       deep in the directory tree (that means also Dir1.3.1 will be
+#       scanned) you can change your regexp like this:
+#
+#       matchexcludepath=^Container1\\Dir1\.3$
+#
+#       Please note that in this tag, if you want to refer to the parent
+#       root of a directory you have to address the "alias" value of the
+#       the source.
+#
+#       You can set as many directives as you want one per line.
+#       Take always care each line DOES NOT END WITH A "|" (pipe)
+#
+#       Example
+#       matchexcludepath=^Container1\\Dir1\.3$
+#       matchexcludepath=^Container1\\Dir1\.4
+#
+
+# ********************************************************************
+#  TAG: matchexcludefiles (optional)
+#  
+#       Holds the regular expression to test file names against.
+#       Every file name (regardless their path) which match this
+#       regular expression will be excluded from the selection criteria
+#
+#       If you do not want to exclude any file upon regex criteria then
+#       simply comment this line out.
+#
+#       Example 
+#       matchexcludefiles=.*\.txt$              (to discard *.txt)
+#       matchexcludefiles=.*\.txt$|.*\.tmp$     (to discard *.txt AND *.tmp)
+#
+#       Default
+#       matchexcludefiles=thumbs\.db$|.*\.mp3$|.*\~$|.*\.tmp$
+
+matchexcludefiles=thumbs\.db$|.*\.mp3$|.*\~$|.*\.tmp$
+
+# ********************************************************************
+#  TAG: matchcleanupfiles (optional)
+#  
+#       Holds the regular expression to test file names against.
+#       Every file name (regardless their path) which match this
+#       regular expression will be removed from source during the 
+#       scanning/selection process.
+#
+#       USE WITH GREAT CARE OR YOU WILL LIKELY HAVE ALL OF YOUR
+#       IMPORTANT DATA SIMPLY NUCLEARIZED FROM YOUR SOURCES
+#
+#       Example 
+#       matchcleanupfiles=.*\.tmp$              (to delete *.tmp)
+
+
+# ********************************************************************
+#  TAG: maxfileage (optional)
+#  
+#       Expresses the maxage, in days, a file must have to be selected.
+#       Calculation of age is made over LastWriteTime property compared
+#       to the date the script started.
+#
+#       By default this directive is commented out so no date criteria
+#       is applied on file selection
+#
+#       Example : to select files which have changed in the last 10 days
+#       maxfileage=10     
+#
+#       Default
+#       maxfileage=0
+
+# ********************************************************************
+#  TAG: minfileage (optional)
+#  
+#       Expresses the minage, in days, a file must have to be selected.
+#       Calculation of age is made over LastWriteTime property compared
+#       to the date the script started.
+#
+#       By default this directive is commented out so no date criteria
+#       is applied on file selection
+#
+#       Example : to select files which have over than 10 days ago
+#       minfileage=10     
+#
+#       Default
+#       minfileage=0
+
+# ********************************************************************
+#  TAG: maxfilesize (optional)
+#  
+#       Expresses the maxfilesize, in bytes, a file must be to be selected.
+#
+#       By default this directive is commented out so no date criteria
+#       is applied on file selection. Be careful in selecting files
+#       of size 0
+#
+#       Example : to select files which are of size 1MB or lower
+#       maxfilesize=1024
+#
+#       Default
+#       maxfilesize=
+
+# ********************************************************************
+#  TAG: minfilesize (optional)
+#  
+#       Expresses the minfilesize, in bytes, a file must be to be selected.
+#
+#       By default this directive is commented out so no date criteria
+#       is applied on file selection. Be careful in selecting files
+#       of size 0
+#
+#       Example : to select files which are of size at least 1MB or higher
+#       minfilesize=1024
+#
+#       Default
+#       minfilesize=
+
+# ********************************************************************
+#  TAG: matchstoprecurse (optional)
+#  
+#       Holds the regular expression to test directory names against.
+#       Every directory name (full path from Container) which match 
+#       this regular expression wont be entered for recursion.
+#       In other words recursion into subdirectories will stop
+#       if the path to be entered matches this regular expression.
+#
+#       Example 
+#       matchstoprecurse=^Container1\\Dir1\.3   (will NOT enter Container1\Dir1.3)
+#       matchstoprecurse=\\DirName              (will NOT enter any directory named "DirName")
+#
+#       Default
+#       matchstoprecurse=
+
+# ********************************************************************
+#  TAG: maxdepth (optional)
+#  
+#       Expresses the maximum recursion level to be reached while 
+#       performing a scan on the directory tree in search of files
+#       to backup.
+#
+#  		If not defined the script assumes a maximum level of 100 (default).
+#  		The value is zero-based which means a value of zero whil stop the
+#  		the scanning at the first level. A value of 1 will allow 1 recursion
+#  		level therefore scanning the firs level of subfolders and so on
+#
+#       Example 
+#       maxdepth=100				(default)
+#       maxdepth=3					
+#
+#       Default
+#       maxdepth=
+
+# ********************************************************************
+#  TAG: rotate (optional)
+#  
+#  		This variable holds the number of historycal archive backups you
+#  		want to keep on target media. An zero value means no rotation
+#  		will be performed after succesful archiving and YOU will be in charge
+#  		to delete old backups. Pay attention or your target media
+#  		will run out of free space soon.
+#  		For example: if you set this value to 3 then it means the 3 newest
+#  		backups of the current type are kept on target media.
+#  		For a "classic" 3 week incremental scheme we suggest to :
+#  		rotate=3 for full backups (launched once a week)
+#  		rotate=21 for incr backups (launched once per day)
+#
+#       Example 
+#       rotate=5
+#
+#       Default
+#       rotate=
+
+# ********************************************************************
+#  TAG: nofollowjunctions (optional)
+#  
+#       This is a switch tag which means no value is associated
+#       to it. 
+#       If you uncomment this tag the scan process will not
+#       follow junction points: if a junction point is met the
+#       scan process will not drop in.
+#
+#       If this value is commented out then junction points will
+#       be followed as normal directories.
+#
+#       Default
+#       nofollowjunctions
+
+# ********************************************************************
+#  TAG: useswitches (optional)
+#  
+#       With this tag you can specify a specific set of switches to
+#       be used by 7zip. Fine tuning of 7zip is essential so
+#       you may want to adjust compression switches to specific
+#       values needed by type of files you're going to archive.
+#
+#       By default the script will assume switches set in variable
+#       Bk7ZipSwitches which is valued in the 7zBackup-vars.ps1
+#       script. Defining new swicthes here will override thir values.
+#
+#       It's essential always to remember to include the -bd switch
+#       which will supress 7-zip progress indicator otherwise you will
+#       have the compression detail file bloated with hundreds of rows
+#       which simply hold percent numbers.
+#
+#       Default (in 7zbackup-vars.ps1)
+#       useswitches=-bd -ssw -mx1 -md=96m -mmt=1 -mtc=on -mf=off -slp -scsUTF-8
