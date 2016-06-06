@@ -192,6 +192,9 @@ matchexcludefiles=thumbs\.db$|.*\.mp3$|.*\~$|.*\.tmp$
 #       Example : to select files which have changed in the last 10 days
 #       maxfileage=10     
 #
+#       Note this value supports decimal
+#       maxfileage=1.5 means files with an age less than 36 hours
+#
 #       Default
 #       maxfileage=0
 
@@ -207,6 +210,9 @@ matchexcludefiles=thumbs\.db$|.*\.mp3$|.*\~$|.*\.tmp$
 #
 #       Example : to select files which have over than 10 days ago
 #       minfileage=10     
+#
+#       Note this value supports decimal
+#       maxfileage=1.5 means files with an age more than 36 hours
 #
 #       Default
 #       minfileage=0
@@ -312,21 +318,17 @@ matchexcludefiles=thumbs\.db$|.*\.mp3$|.*\~$|.*\.tmp$
 #       nofollowjunctions
 
 # ********************************************************************
-#  TAG: useswitches (optional)
+#  TAG: compression (optional)
 #  
-#       With this tag you can specify a specific set of switches to
-#       be used by 7zip. Fine tuning of 7zip is essential so
-#       you may want to adjust compression switches to specific
-#       values needed by type of files you're going to archive.
+#       This value holds the level of compression you want to reach
+#       Permitted values are 1 or 3 or 5 or 7 or 9
 #
-#       By default the script will assume switches set in variable
-#       Bk7ZipSwitches which is valued in the 7zBackup-vars.ps1
-#       script. Defining new swicthes here will override thir values.
+#       If omitted or not set then 7-zip will auto set it
 #
-#       It's essential always to remember to include the -bd switch
-#       which will supress 7-zip progress indicator otherwise you will
-#       have the compression detail file bloated with hundreds of rows
-#       which simply hold percent numbers.
+#       Example 
+#       compression=0 			(no compression only archiving)
+#       compression=1 			(max speed low compression)
+#       compression=9 			(max compression low speed)
 #
-#       Default (in 7zbackup-vars.ps1)
-#       useswitches=-bd -ssw -mx1 -md=96m -mmt=1 -mtc=on -mf=off -slp -scsUTF-8
+#       Default
+#       compression=

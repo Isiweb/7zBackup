@@ -29,7 +29,7 @@
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name BkType -value "<value>" -scope 1
+# Set-Variable -Name BkType -Value "<value>" -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : BkWorkDrive 
@@ -47,7 +47,7 @@
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name BkWorkDrive -value "<value>" -scope 1
+# Set-Variable -Name BkWorkDrive -Value "<value>" -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : BkSelection 
@@ -62,7 +62,7 @@
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name BkSelection -value "<value>" -scope 1
+# Set-Variable -Name BkSelection -Value "<value>" -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : BkDestPath 
@@ -78,7 +78,7 @@
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name BkDestPath -value "<value>" -scope 1
+# Set-Variable -Name BkDestPath -Value "<value>" -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : BkArchivePrefix 
@@ -98,7 +98,7 @@
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-Set-Variable -name BkArchivePrefix -value ($Env:Computername) -scope 1
+Set-Variable -Name BkArchivePrefix -Value ($Env:Computername) -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : BkArchiveType 
@@ -116,12 +116,12 @@ Set-Variable -name BkArchivePrefix -value ($Env:Computername) -scope 1
 #  tar  : Unix and linux compatible but only archiving (no compression)
 #
 #  Archive name creation template is the following:
-#  $BkArchivePrefix-$BkType-YYYYMMDD-HH-mm.$BkArchiveType
+#  $BkArchivePrefix-$BkType-YYYYMMDD-HHmmss.$BkArchiveType
 #  -------------------------------------------------------------------
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-Set-Variable -name BkArchiveType -value "7z" -scope 1
+Set-Variable -Name BkArchiveType -Value "7z" -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : BkArchivePassword 
@@ -134,8 +134,53 @@ Set-Variable -name BkArchiveType -value "7z" -scope 1
 #  -------------------------------------------------------------------
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
+#  Please read 7-zip help info for useful informations about password
+#  complexity
 #  -------------------------------------------------------------------
-# Set-Variable -name BkArchivePassword -value "<yourpassword>" -scope 1
+# Set-Variable -Name BkArchivePassword -Value "<yourpassword>" -Scope 1
+
+# --------------------------------------------------------------------
+#  Variable       : BkArchiveCompression 
+#  Argument Name  : --compression
+#  Description    : Any valid value among 0 1 3 5 7 9
+#  Values         : 
+#  Comments   
+#  -------------------------------------------------------------------
+#  Set this to calibrate speed vs space reduction
+#  -------------------------------------------------------------------
+#  Uncomment the following Set-Variable statement and set proper
+#  "<value>" if you want to set the value for the 7zBackup script.
+#  Please read 7-zip help info for useful informations about password
+#  complexity
+#  -------------------------------------------------------------------
+# Set-Variable -Name BkArchiveCompression -Value "< 0 | 1 | 3 | 5 | 7 | 9>" -Scope 1
+
+# --------------------------------------------------------------------
+#  Variable       : BkArchiveThreads 
+#  Argument Name  : --threads
+#  Description    : An integer number greater than 0
+#  Values         : <default not set>
+#  Comments   
+#  -------------------------------------------------------------------
+#  This variable sets the number of threads 7-zip should be allowed
+#  to use. By default 7-zip uses one thread for each available core
+#  therefore eating up most of computational resources.
+#  You can limit this behavior by limiting the number of threads
+#  to be uses therefore keeping your computer responsive.
+#  Please note that the number of threads can not exceed the number
+#  of installed cores.
+#  -------------------------------------------------------------------
+#  Uncomment the following Set-Variable statement and set proper
+#  "<value>" if you want to set the value for the 7zBackup script.
+#  -------------------------------------------------------------------
+# Set-Variable -Name BkArchiveThreads -Value ([int]4) -Scope 1
+#
+# - or do a calc, say, to use only 50% of cores -
+#
+# Set-Variable -Name "tmpNumCores" -Value([int]0) -Scope Local
+# Get-WmiObject -class win32_processor | ForEach-Object {$tmpNumCores += $_.NumberOfCores}
+# Set-Variable -Name BkArchiveThreads -Value [int]($tmpNumCores * .8) -Scope 1
+# Remove-Variable -Name "tmpNumCores"
 
 # --------------------------------------------------------------------
 #  Variable       : BkRotate 
@@ -158,7 +203,7 @@ Set-Variable -name BkArchiveType -value "7z" -scope 1
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name BkRotate -value ([int]3) -scope 1
+# Set-Variable -Name BkRotate -Value ([int]3) -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : BkKeepEmptyDirs
@@ -178,18 +223,18 @@ Set-Variable -name BkArchiveType -value "7z" -scope 1
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name BkKeepEmptyDirs -value $True -scope 1
+# Set-Variable -Name BkKeepEmptyDirs -Value $True -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : BkMaxDepth 
 #  Argument Name  : --maxdepth
-#  Description    : An integer number in range from 0 to 100
+#  Description    : An integer number 
 #  Values         : 
 #  Comments   
 #  -------------------------------------------------------------------
 #  This variable holds the maximum level to be reached in directory
 #  recursion while scanning for files to backup.
-#  If not defined the script assumes a maximum level of 100 (default).
+#  If not defined the script assumes no limit
 #
 #  The value is zero-based which means a value of zero whil stop the
 #  the scanning at the first level. A value of 1 will allow 1 recursion
@@ -199,8 +244,7 @@ Set-Variable -name BkArchiveType -value "7z" -scope 1
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name BkMaxDepth -value ([int]100) -scope 1
-
+# Set-Variable -Name BkMaxDepth -Value ([int]0) -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : BkLogFile 
@@ -216,7 +260,7 @@ Set-Variable -name BkArchiveType -value "7z" -scope 1
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name BkLogFile -value "<value>" -scope 1
+# Set-Variable -Name BkLogFile -Value "<value>" -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : Bk7ZipBin
@@ -232,39 +276,7 @@ Set-Variable -name BkArchiveType -value "7z" -scope 1
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-Set-Variable -name Bk7ZipBin -value (Join-Path $Env:ProgramFiles "\7-zip\7z.exe") -scope 1
-
-# --------------------------------------------------------------------
-#  Variable       : Bk7ZipSwitches
-#  Argument Name  : none (can't pass them from cli)
-#  Description    : Extra switches to pass to 7z.exe when running
-#  Values         : 
-#  Comments   
-#  -------------------------------------------------------------------
-#  Here you can specify several switches supported by 7zip.
-#  Refer to 7zip documentation for a proper usage.
-#  READ THE MANUAL ! READ THE MANUAL ! READ THE MANUAL !
-#  By default we assume the following:
-#  -bd        disable progress status
-#  -ssw       archive locked files
-#  -mf=off    disable compression filters for executable files
-#  -mx1       Ultra Fast compression
-#  -mmt=1     one thread only
-#  -ms=e      Use a separate solid block for each new file extension
-#  -mtc=on    archive NTFS file infomations (not ACLS)
-#  -md=96m    use 96m dictionary
-#  -slp       enables Large Pages mode.
-#  -scsUTF-8  Read selection file encoded as UTF8     << DO NOT CHANGE
-#  -sccUTF-8  Standard Output encoded as UTF8         << DO NOT CHANGE
-#  
-#  WARNING ! These default switches are to be intended for 7z archives
-#  Choosing different archive types can cause 7-zip to refuse to execute
-#
-#  -------------------------------------------------------------------
-#  Uncomment the following Set-Variable statement and set proper
-#  "<value>" if you want to set the value for the 7zBackup script.
-#  -------------------------------------------------------------------
-Set-Variable -name Bk7ZipSwitches -value "-bd -ssw -mx1 -md=96m -mmt=6 -mtc=on -mf=off -slp -scsUTF-8 -sccUTF-8" -scope 1
+# Set-Variable -Name Bk7ZipBin -Value (Join-Path $Env:ProgramFiles "\7-zip\7z.exe") -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : BkJunctionBin
@@ -285,7 +297,7 @@ Set-Variable -name Bk7ZipSwitches -value "-bd -ssw -mx1 -md=96m -mmt=6 -mtc=on -
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-Set-Variable -name BkJunctionBin -value (Join-Path $Env:ProgramFiles  "\SysInternalsSuite\Junction.exe") -scope 1
+Set-Variable -Name BkJunctionBin -Value (Join-Path $Env:ProgramFiles  "\SysInternalsSuite\Junction.exe") -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : BkNotifyLog
@@ -308,9 +320,9 @@ Set-Variable -name BkJunctionBin -value (Join-Path $Env:ProgramFiles  "\SysInter
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-#  Set-Variable -name BkNotifyLog -value "someemail@somedomain.com" -scope 1
+#  Set-Variable -Name BkNotifyLog -Value "someemail@somedomain.com" -Scope 1
 # - or -
-#  Set-Variable -name BkNotifyLog -value @("someemail@somedomain.com", "someotheremail@somedomain.com") -scope 1
+#  Set-Variable -Name BkNotifyLog -Value @("someemail@somedomain.com", "someotheremail@somedomain.com") -Scope 1
 
 # --------------------------------------------------------------------
 #  Variable       : BkNotifyExtra
@@ -333,10 +345,10 @@ Set-Variable -name BkJunctionBin -value (Join-Path $Env:ProgramFiles  "\SysInter
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-#  Set-Variable -name BkNotifyExtra -value "< none | inline | attach >" -scope 1
+#  Set-Variable -Name BkNotifyExtra -Value "< none | inline | attach >" -Scope 1
 
 # --------------------------------------------------------------------
-#  Variable       : mailSubject
+#  Variable       : BkmailSubject
 #  Argument Name  : None (you can't pass it from cli)
 #  Description    : String to use as subject for notification email
 #  Values         : 
@@ -347,12 +359,14 @@ Set-Variable -name BkJunctionBin -value (Join-Path $Env:ProgramFiles  "\SysInter
 #  Uncomment one of the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name mailSubject -value "7zBackup Report Host $Env:ComputerName.$Env:USERDNSDOMAIN" -scope 1
+# Set-Variable -Name BkMailSubject -Value "7zBackup Report Host $Env:ComputerName.$Env:USERDNSDOMAIN" -Scope 1
 # - or -
-# Set-Variable -name smtpFrom -value "7zBackup Report" -scope 1
+Set-Variable -Name BkMailSubject -Value "7zBackup Report Host $Env:ComputerName" -Scope 1
+# - or -
+# Set-Variable -Name BkMailSubject -Value "7zBackup Report" -Scope 1
 
 # --------------------------------------------------------------------
-#  Variable       : smtpFrom
+#  Variable       : BkSmtpFrom
 #  Argument Name  : --notifyfrom
 #  Description    : Email address to send email notifications from
 #  Values         : 
@@ -363,12 +377,12 @@ Set-Variable -name BkJunctionBin -value (Join-Path $Env:ProgramFiles  "\SysInter
 #  Uncomment one of the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name smtpFrom -value ($Env:UserName + "@" + $Env:UserDNSDomain) -scope 1
+# Set-Variable -Name BkSmtpFrom -Value ($Env:UserName + "@" + $Env:UserDNSDomain) -Scope 1
 # - or -
-# Set-Variable -name smtpFrom -value "<value>" -scope 1
+# Set-Variable -Name BkSmtpFrom -Value "<value>" -Scope 1
 
 # --------------------------------------------------------------------
-#  Variable       : smtpRelay
+#  Variable       : BkSmtpRelay
 #  Argument Name  : --smtpserver
 #  Description    : The name of the smtp server to use when sending
 #                   notification emails.
@@ -380,10 +394,10 @@ Set-Variable -name BkJunctionBin -value (Join-Path $Env:ProgramFiles  "\SysInter
 #  Uncomment one of the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name smtpRelay -value "<yourmailserverDNSName_or_IP_address>" -scope 1
+# Set-Variable -Name BkSmtpRelay -Value "<yourmailserverDNSName_or_IP_address>" -Scope 1
 
 # --------------------------------------------------------------------
-#  Variable       : smtpPort
+#  Variable       : BkSmtpPort
 #  Argument Name  : --smtpport
 #  Description    : The port to contact smtp server on
 #  Values         : integer number (default 25)
@@ -394,10 +408,10 @@ Set-Variable -name BkJunctionBin -value (Join-Path $Env:ProgramFiles  "\SysInter
 #  Uncomment one of the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-Set-Variable -name smtpPort -value ([int]25) -scope 1
+Set-Variable -Name BkSmtpPort -Value ([int]25) -Scope 1
 
 # --------------------------------------------------------------------
-#  Variable       : smtpUser
+#  Variable       : BkSmtpUser
 #  Argument Name  : --smtpuser
 #  Description    : The user to access authenticated smtp
 #  Values         : String
@@ -406,10 +420,10 @@ Set-Variable -name smtpPort -value ([int]25) -scope 1
 #  Uncomment one of the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name smtpUser -value "<authuser>" -scope 1
+# Set-Variable -Name BkSmtpUser -Value "<authuser>" -Scope 1
 
 # --------------------------------------------------------------------
-#  Variable       : smtpPass
+#  Variable       : BkSmtpPass
 #  Argument Name  : --smtppass
 #  Description    : The password to use for authenticated smtp
 #  Values         : String
@@ -418,10 +432,10 @@ Set-Variable -name smtpPort -value ([int]25) -scope 1
 #  Uncomment one of the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name smtpPass -value "<password>" -scope 1
+# Set-Variable -Name BkSmtpPass -Value "<password>" -Scope 1
 
 # --------------------------------------------------------------------
-#  Variable       : smtpSsl
+#  Variable       : BkSmtpSsl
 #  Argument Name  : --smtpssl
 #  Description    : Whether or not to enable Ssl over smtp
 #  Values         : True or False
@@ -432,4 +446,122 @@ Set-Variable -name smtpPort -value ([int]25) -scope 1
 #  Uncomment one of the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
 #  -------------------------------------------------------------------
-# Set-Variable -name smtpSsl -value ($False) -scope 1
+# Set-Variable -Name BkSmtpSsl -Value ($False) -Scope 1
+
+# --------------------------------------------------------------------
+#  Variable       : BkPreAction
+#  Argument Name  : --pre
+#  Description    : Sets the action to invoke before scanning process
+#                   takes place. Can be, for example, used to create
+#                   additional data to backup
+#  Values         : Either a pws file or a script block
+#
+#  Comments   
+#  -------------------------------------------------------------------
+#  Please take into account that this code must return output to the
+#  calling script if you want the action to be logged properly.
+#
+#  -------------------------------------------------------------------
+#  Uncomment one of the following Set-Variable statement and set proper
+#  "<value>" if you want to set the value for the 7zBackup script.
+#  -------------------------------------------------------------------
+# Set-Variable -Name BkPreAction -Value "C:\MyScripts\SomeOtherScript.ps1" -Scope 1
+# - or, say for example you want to backup your sql express databases -
+  # Set-Variable -Name BkPreAction -Value {
+
+	# [void][System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.ConnectionInfo');            
+	# [void][System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.Management.Sdk.Sfc');            
+	# [void][System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SMO');            
+	# # Required for SQL Server 2008 (SMO 10.0).            
+	# [void][System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SMOExtended');            
+	# $Server = ".\SQLEXPRESS";  
+	# $Dest = "D:\somepath\";   
+	# $srv = New-Object Microsoft.SqlServer.Management.Smo.Server $Server;            
+	# # If missing set default backup directory.            
+	# If ($Dest -eq "") { $Dest = $server.Settings.BackupDirectory + "\" };
+
+	# # Clean Dest directory from any previous backup
+	# Remove-Item $Dest -Recurse -Force -ErrorAction SilentlyContinue
+	# Start-Sleep 5
+	# New-Item $Dest -ItemType Directory | Out-Null
+
+	# Write-Output ("Started at: " + (Get-Date -format yyyy-MM-dd-HH:mm:ss));            
+	# # Full-backup for every database            
+	# foreach ($db in $srv.Databases)            
+	# {            
+		# If($db.Name -ne "tempdb")  # Non need to backup TempDB            
+		# {   
+			# Write-Output ("Backup of $db started")
+			# $timestamp = Get-Date -format yyyy-MM-dd-HH-mm-ss;            
+			# $backup = New-Object ("Microsoft.SqlServer.Management.Smo.Backup");            
+			# $backup.Action = "Database";            
+			# $backup.Database = $db.Name;            
+			# $backup.Devices.AddDevice($Dest + $db.Name + "_full_" + $timestamp + ".bak", "File");            
+			# $backup.BackupSetDescription = "Full backup of " + $db.Name + " " + $timestamp;            
+			# $backup.Incremental = 0;            
+			# # Starting full backup process.            
+			# $backup.SqlBackup($srv);     
+			# # For db with recovery mode <> simple: Log backup.            
+			# If ($db.RecoveryModel -ne 3)            
+			# {            
+				# $timestamp = Get-Date -format yyyy-MM-dd-HH-mm-ss;            
+				# $backup = New-Object ("Microsoft.SqlServer.Management.Smo.Backup");            
+				# $backup.Action = "Log";            
+				# $backup.Database = $db.Name;            
+				# $backup.Devices.AddDevice($Dest + $db.Name + "_log_" + $timestamp + ".trn", "File");            
+				# $backup.BackupSetDescription = "Log backup of " + $db.Name + " " + $timestamp;            
+				# #Specify that the log must be truncated after the backup is complete.            
+				# $backup.LogTruncation = "Truncate";
+				# # Starting log backup process            
+				# $backup.SqlBackup($srv);            
+			# };            
+		# };            
+	# };            
+	# Write-Output ("Finished at: " + (Get-Date -format  yyyy-MM-dd-HH:mm:ss));
+# }
+
+# --------------------------------------------------------------------
+#  Variable       : BkPostAction
+#  Argument Name  : --post
+#  Description    : Sets the action to invoke after the archiving
+#                   process completes. Can be used for example to
+#                   move or upload the generated archive
+#  Values         : Either a pws file or a script block
+#
+#  Comments   
+#  -------------------------------------------------------------------
+#  Please take into account that this code must return output to the
+#  calling script if you want the action to be logged properly.
+#
+#  -------------------------------------------------------------------
+#  Uncomment one of the following Set-Variable statement and set proper
+#  "<value>" if you want to set the value for the 7zBackup script.
+#  -------------------------------------------------------------------
+# Set-Variable -Name BkPostAction -Value "C:\MyScripts\SomeOtherScript.ps1" -Scope 1
+# - or, say for example you want to upload your archive via ftp -
+# Set-Variable -Name BkPostAction -Value {
+
+	# $RemoteTarget = "ftp://user:password@<hostname-or-ip>/$BkArchiveName"
+	# $numTries  = 0; $maxTries = 5
+	# $status    = $False
+	# do {
+		# Try {
+			# Write-Output ("Trying to upload file {0} : attempt {1}" -f $BkArchiveName, ($numTries + 1))
+			# $webclient = New-Object -TypeName System.Net.WebClient
+			# $uri = New-Object -TypeName System.Uri -ArgumentList $RemoteTarget
+			# $webclient.UploadFile($uri, $OutFile)
+			# $status = $true
+		# } Catch {
+			# Write-Output $_.Exception.Message
+			# $numTries++
+			# Start-Sleep -s 5
+		# }
+	# }
+	# While ($numTries -le $maxTries -and $status -eq $false)
+	# If($status) {
+		# Write-Output ("File {0} succesfully uploaded" -f $BkArchiveName)
+	# } Else {
+		# Write-Output ("Could not upload {0}" -f $BkArchiveName)
+	# }
+	
+#}
