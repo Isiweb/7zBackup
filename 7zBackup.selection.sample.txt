@@ -332,3 +332,36 @@ matchexcludefiles=thumbs\.db$|.*\.mp3$|.*\~$|.*\.tmp$
 #
 #       Default
 #       compression=
+
+# ********************************************************************
+#  TAG: threads (optional)
+#  
+#       Sets how many threads 7-zip is allowed to use.
+#       By default 7-zip will endorse multithreading adopting 1 thread
+#       per each available CPU core.
+#       If you want to disable or control this behavior please set this
+#       value. 
+#
+#       Example 
+#       threads=0 				(multithreading disabled)
+#       threads=1 				(multithreading disabled)
+#       threads=4				(use 4 threads on a 4+ core cpu)
+#
+#       Default
+#       <not set> which means use all available threads
+
+# ********************************************************************
+#  TAG: solid (optional)
+#  
+#       This value sets wether or not archive should endorse
+#       solid mode. To understand what is the meaning of solid mode
+#       please refer to 7-zip documentation
+#       If this directive is not set and the format of the archive is
+#       7z then it's assumed solid mode should be endorsed
+#
+#       Example 
+#       solid=0 				(solid mode disabled)
+#       solid=1 				(solid mode enabled)
+#
+#       Default
+#       <not set> which meanse solid mode enabled

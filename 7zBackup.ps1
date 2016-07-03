@@ -208,7 +208,7 @@ $version = "1.10.3-Stable" # 20160425 Anlan   Code  : Typo in LasWriteTime inste
 #                                             Feat  : MaxFileAge and MinFileAge now support Decimal
 #                                             Feat  : MaxFileAge and MinFileAge can be passed by CLI
 #                                             
-$version = "2.0.0-Stable"  # 2016xxxx Anlan   Code  : Since version 15.x of 7-zip it can now save natively emtpy dirs
+$version = "2.0.1-Stable"  # 20160608 Anlan   Code  : Since version 15.x of 7-zip it can now save natively emtpy dirs
 #                                                     therefore no need to create dummy files
 #                                             Code  : Removed the check for pairs of command arguments.
 #                                                     Now the parser checks properly also for switch arguments
@@ -235,7 +235,9 @@ $version = "2.0.0-Stable"  # 2016xxxx Anlan   Code  : Since version 15.x of 7-zi
 #                                             Feat  : --pre and --post switches can invoke pws actions
 #                                             Feat  : --threads switch can control resource usage by 7-zip
 #
-#                                             
+$version = "2.0.2-Stable"  # 2016xxxx Anlan   Bug   : Improper output when Send-Notification is invoked
+#                                             Feat  : added --solid switch to enable or disable solid archives
+#                                             Feat  : compression / solid mode / threads can be also set in selection file
 #
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -314,7 +316,8 @@ $helpText = @"
                        [--7zipbin < path to 7z.exe > ]					   
                        [--archivetype < 7z | zip | tar >]
                        [--compression < 0 | 1 | 3 | 5 | 7 | 9 >]
-                       [--threads < number >]					   
+                       [--threads < number >]
+                       [--solid < True | False >]					   
                        [--password < string >]
                        [--workdir < working directory > OBSOLETE]
 					   
@@ -367,6 +370,14 @@ $helpText = @"
                archiving while higher values mean the opposite.
                If omitted 7zip will use default settings			   
 
+ --threads     Number of threads 7zip is allowed to use. If not set then
+               7zip will try to adopt one thread per core. Set this value
+               to 1 or 0 to disable multithreading.
+			   
+ --solid       Sets wether or not 7z archives should endorse solid format
+               By default 7z archives endorse solid format. Refer to
+               7-zip documentation to understand what are solid archives.
+ 
  --rotate      This value must be a number and indicates the number of
                archives that should remain on disk after successful
                archiving. For example if you set --rotation 3 on a 
@@ -599,9 +610,9 @@ Function Clear-Script {
 	}
 
 	
-    If ((Test-Variable "cmdLineBatch")) {if ((Test-Path ($cmdLineBatch))) { Remove-Item -literalpath $cmdLineBatch | Out-Null }}
-	If ((Test-Variable "BkLogFile")) {if ((Test-Path ($BkLogFile))) { Remove-Item -literalpath $BkLogFile | Out-Null }}
-	If ((Test-Variable "BkLockFile")) {if ((Test-Path ($BkLockFile))) { Remove-Item -literalpath $BkLockFile | Out-Null }}
+    If ((Test-Variable "cmdLineBatch")) {if ((Test-Path ($cmdLineBatch))) { Remove-Item -LiteralPath $cmdLineBatch | Out-Null }}
+	If ((Test-Variable "BkLogFile")) {if ((Test-Path ($BkLogFile))) { Remove-Item -LiteralPath $BkLogFile | Out-Null }}
+	If ((Test-Variable "BkLockFile")) {if ((Test-Path ($BkLockFile))) { Remove-Item -LiteralPath $BkLockFile | Out-Null }}
 	Set-Location ($MyContext.StartDir)
 	If ((Test-Path -Path ($BkRootDir) -PathType Container)) { Remove-RootDir $BkRootDir | Out-Null }
 	[console]::TreatControlCAsInput = $False
@@ -749,7 +760,7 @@ Function PostArchiving {
 	if ($Counters.PlaceHolders.count -gt 0) {
 		Write-Progress -Activity  "Performing post archive operations" -Status "Please wait ..." -CurrentOperation "Removing Placeholders for Empty Directories"
 		$Counters.PlaceHolders | Remove-Item -Force | Out-Null
-		Write-Progress -Activity "." -Completed
+		Write-Progress -Activity "." -Status "." -Completed
 	}
 	If(
 		(Check-CTRLCRequest) -Or
@@ -797,9 +808,10 @@ Function PostArchiving {
 		}
 	}
 	
-	Write-Progress -Activity  "Performing post archive operations" -Completed
+	Write-Progress -Activity "." -Status "." -Completed
 	$MyContext.PostProcessFilesEnd = Get-Date
 	$MyContext.PostProcessFilesElapsed = New-TimeSpan $MyContext.PostProcessFilesStart $MyContext.PostProcessFilesEnd
+	Trace " "
 	Trace (" Completed in {0,0:n0} days {1,0:n0} hours {2,0:n0} minutes {3,0:n3} seconds" -f $MyContext.PostProcessFilesElapsed.Days, $MyContext.PostProcessFilesElapsed.Hours, $MyContext.PostProcessFilesElapsed.Minutes, ($MyContext.PostProcessFilesElapsed.Seconds + ($MyContext.PostProcessFilesElapsed.MilliSeconds/1000)) )		
 	Trace " "
 
@@ -1091,7 +1103,9 @@ Function Send-Notification {
 			$_.Value.Dispose()
 			} Catch {}
 		}
-	
+
+		# Do  nothing if we have no-one to notify
+		If(!($BkNotifyLog)) { return; }
 		
 		Write-Host " "
 		Write-Host " Sending notification email ..."
@@ -1361,6 +1375,7 @@ Function Validate-Arguments {
 				"--archivetype"     { Set-Variable -name BkArchiveType -value $BkArguments[++$i] -scope Script }
 				"--compression"     { Set-Variable -name BkArchiveCompression -value $BkArguments[++$i] -scope Script }
 				"--threads"         { Set-Variable -name BkArchiveThreads -value $BkArguments[++$i] -scope Script }
+				"--solid"           { Set-Variable -name BkArchiveSolid -value $BkArguments[++$i] -scope Script }
 				"--archivepassword" { Set-Variable -name BkArchivePassword -value $BkArguments[++$i] -scope Script }
 				"--password"        { Set-Variable -name BkArchivePassword -value $BkArguments[++$i] -scope Script }
 				"--rotate"          { Set-Variable -name BkRotate -value $BkArguments[++$i] -scope Script }
@@ -1519,6 +1534,12 @@ Function Validate-Variables {
 			
 			# Look for compression
 			If (!(Test-Variable "BkArchiveCompression"))  {	$BkArchiveCompression | ? {$_ -match "^compression=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveCompression" -Value $_.Value} } 
+
+			# Look for threads
+			If (!(Test-Variable "BkArchiveThreads"))  {	$BkArchiveThreads | ? {$_ -match "^threads=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveThreads" -Value $_.Value} } 
+			
+			# Look for Solid mode
+			If (!(Test-Variable "BkArchiveSolid"))  {	$BkArchiveSolid | ? {$_ -match "^solid=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveSolid" -Value $_.Value} } 
 			
 		}
 	}
@@ -1618,6 +1639,23 @@ Function Validate-Variables {
 			Set-Variable -Name BkArchiveCompression -Value ([int]$BkArchiveCompression) -Scope Script
 		}
 	}
+
+	# --------------------------------------------------------------------------------------------------------------------------
+	# Solid archive policy - Checks
+	# --------------------------------------------------------------------------------------------------------------------------
+	If((Test-Variable "BkArchiveSolid") -eq $True) {
+		Set-Variable -name b -value $True -scope Local
+		If([system.boolean]::tryparse($BkArchiveSolid,[ref]$b)) {
+			Set-Variable -name BkArchiveSolid -value $b -scope Script
+		} Else {
+			Write-Output "Provided value for --solid argument is not valid boolean value."
+			Remove-Variable -name BkArchiveSolid -scope Script
+		}
+		Remove-Variable -name b -scope Local
+	} Else {
+		Set-Variable -name "BkArchiveSolid" -value $True -scope Script
+	}
+	
 	
 	# --------------------------------------------------------------------------------------------------------------------------
 	# Threading - Checks
@@ -1704,9 +1742,7 @@ Function Validate-Variables {
 		# From Email Addresses - Checks
 		# ----------------------------------------------------------------------------------------------------------------------
 		If(!($BkNotifyLog -is [array])) { $BkNotifyLog = @($BkNotifyLog) }
-		ForEach-Object {
-			If(!(IsValidEmailAddress $_)) { Write-Output ("Missing or invalid --notify argument {0} " -f $_) }
-		} -InputObject $BkNotifyLog 
+		$BkNotifyLog | ForEach-Object { If(!(IsValidEmailAddress $_)) { Write-Output ("Missing or invalid --notify argument {0} " -f $_) } }
 
 
 		# ----------------------------------------------------------------------------------------------------------------------
@@ -1929,11 +1965,10 @@ If($BkNoFollowJunctions) {Trace " Reparse points .... :  Will NOT be followed" }
 Trace " Destination ....... :  $BkDestPath"
 Trace " Archive Name ...... :  $BkArchiveName"
 Trace " Archive Type ...... :  $BkArchiveType"
-If(Test-Variable "BkArchiveCompression") { Trace " Compression level . :  $BkArchiveCompression" }
-
 If((Test-Variable "BkRotate")) { Trace " Rotation policy ... :  Keep last $BkRotate archive(s) " } Else { Trace " Rotation policy ... :  Keep all archive(s) " }
 Trace (" 7zip binary ....... :  {0} (ver. {1}) " -f $Bk7zipBin,$MyContext.SevenZBinVersionInfo.ProductVersion)
 Trace (" 7zip threading .... :  {0} " -f ( & { If(Test-Variable "BkArchiveThreads") { Write-Output "$BkArchiveThreads threads" } Else { Write-Output "Auto"}   }))
+If(Test-Variable "BkArchiveCompression") { Trace " 7zip Compression .. :  $BkArchiveCompression" } Else { Trace " 7zip Compression .. :  Auto" }
 Trace " "
 Trace " ------------------------------------------------------------------------------"
 
@@ -2132,7 +2167,7 @@ $BkSources.GetEnumerator() | ForEach-Object {
 While ($True) {
 	If(Check-CTRLCRequest) {break}
 	ProcessFolder $catalogFolders[$catalogFoldersIndex] | Out-Null
-	If (!(++$catalogFoldersIndex -le $catalogFolders.Count)) {Write-Progress -Activity "." -Completed; break}
+	If (!(++$catalogFoldersIndex -le $catalogFolders.Count)) {Write-Progress -Activity "." -Status "." -Completed; break}
 }
 If($MyContext.Cancelling) {
 	If(!($MyContext.Cancelling)) { Do-PostAction; Send-Notification }
@@ -2161,8 +2196,7 @@ If($Counters.FilesSelected -gt 0) {
 $SWriters.GetEnumerator() | ForEach-Object { 
 	$_.Value.Flush()
 	If($_.Name -notmatch "^Log$") {$_.Value.Close()} 
-} 
--End { Start-Sleep -Milliseconds 500 }
+} -End { Start-Sleep -Milliseconds 500 }
 
 
 # Calc of elapsed time for selection process
@@ -2215,7 +2249,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		# Do some stats (many thanks to http://www.hanselman.com/blog/ParsingCSVsAndPoorMansWebLogAnalysisWithPowerShell.aspx)
 		Write-Progress -Activity "Calculating Stats on Selection" -Status "Running ..." -CurrentOperation "Please Wait ..."
 		$statsByExtension = Import-Csv $BkCatalogStats -Delimiter "`t" | Select-Object Extension, Size | group Extension | select Name, @{Name="Count";Expression={($_.Count)}}, @{Name="Size";Expression={($_.Group | Measure-Object -Sum Size).Sum }} | Sort Size -desc
-		Write-Progress -Activity "." -Completed
+		Write-Progress -Activity "." -Status "." -Completed
 		
 		# Output summarized data
 		Trace " "
@@ -2252,7 +2286,6 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		If((Test-Variable "BkArchiveCompression") -And ($BkArchiveType -ne "tar")) { 		# Set compression level
 			$Bk7ZipArgs += ("-mx{0}" -f $BkArchiveCompression)
 		}
-		
 		# Important !!!
 		$Bk7ZipArgs += "-scsUTF-8"															# Set charset for list files to UTF8
 		$Bk7ZipArgs += "-sccUTF-8"															# Set charset for console input/output to UTF8
@@ -2264,6 +2297,11 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 			$Bk7ZipArgs += "-bsp0"
 			$Bk7ZipArgs += "-bso1"
 			$Bk7ZipArgs += "-bse2"
+			If($BkArchiveType -eq "7z") {
+				$Bk7ZipArgs += "-mtm=on"													# Stores last Modified timestamps for files.
+				$Bk7ZipArgs += "-mtc=on"													# Stores Creation timestamps for files.
+				$Bk7ZipArgs += "-mta=on"													# Stores last Access timestamps for files.
+			}
 		} Else {
 			$Bk7ZipArgs += "-bd"															# Disable Progress indicator
 		}
@@ -2275,6 +2313,11 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 			} Else {
 				$Bk7ZipArgs += ("-mmt={0}" -f $BkArchiveThreads)							# Use exact number of threads
 			}
+		}
+		
+		# Control solid archives															
+		If(($BkArchiveType -eq "7z") -And !($BkArchiveSolid)) {
+			$Bk7ZipArgs += "-ms=off"													    # Disable solid archive
 		}
 		
 		$Bk7ZipArgs += "-t" + $BkArchiveType												# This is the type of the archive
@@ -2335,7 +2378,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 				Set-Variable -Name Bk7ZipRetc -value ([int]255) -scope Script				# Force return code to 255
 				Start-Sleep -Milliseconds 500
 				# Delete the destination file
-				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -literalpath $BkDestFile -Force | Out-Null }
+				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -LiteralPath $BkDestFile -Force | Out-Null }
 				break
 			}
 		}
@@ -2414,7 +2457,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 							}
 							$BkRotate += -1
 						} Else {
-							remove-item -literalpath (Join-Path $BkDestPath $_.Name) -ErrorAction "SilentlyContinue" | Out-Null
+							remove-item -LiteralPath (Join-Path $BkDestPath $_.Name) -ErrorAction "SilentlyContinue" | Out-Null
 							if ($?) { Trace (" Removed  : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) ) } Else { Trace " WARNING Failed to remove $_.Name"}
 						}
 					}
@@ -2450,26 +2493,26 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 				Trace " " 
 				Trace " Cancelled ! User has stopped 7-Zip archiving process" 
 				Trace " NO ARCHIVE HAS BEEN CREATED" 
-				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -literalpath $BkDestFile -Force | Out-Null }
+				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -LiteralPath $BkDestFile -Force | Out-Null }
 			} ElseIf (($Bk7ZipRetc -eq 2)) {
 				$gP.CriticalCount += 1
 				Trace " " 
 				Trace " Cancelled ! 7-Zip reported a fatal error." 
 				Trace " NO VALID ARCHIVE HAS BEEN CREATED"
-				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -literalpath $BkDestFile -Force | Out-Null }
+				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -LiteralPath $BkDestFile -Force | Out-Null }
 			} ElseIf (($Bk7ZipRetc -eq 7)) {
 				$gP.CriticalCount += 1
 				Trace " " 
 				Trace " Cancelled ! 7-Zip has been invoked with a wrong command line." 
 				Trace " $cmdLine" 
 				Trace " NO VALID ARCHIVE HAS BEEN CREATED" 
-				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -literalpath $BkDestFile -Force | Out-Null }
+				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -LiteralPath $BkDestFile -Force | Out-Null }
 			} ElseIf (($Bk7ZipRetc -eq 8)) {
 				$gP.CriticalCount += 1
 				Trace " "
 				Trace " Cancelled ! 7-Zip reports not enough memory." 
 				Trace " NO VALID ARCHIVE HAS BEEN CREATED" 
-				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -literalpath $BkDestFile -Force | Out-Null }
+				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -LiteralPath $BkDestFile -Force | Out-Null }
 			} ElseIf (!(Test-Path -Path "$BkDestPath\$BkArchiveName" -PathType Leaf)) {
 				$gP.CriticalCount += 1
 				Trace " " 

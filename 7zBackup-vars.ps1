@@ -183,6 +183,23 @@ Set-Variable -Name BkArchiveType -Value "7z" -Scope 1
 # Remove-Variable -Name "tmpNumCores"
 
 # --------------------------------------------------------------------
+#  Variable       : BkArchiveSolid 
+#  Argument Name  : --solid
+#  Description    : Any boolean value
+#  Values         : Default $True
+#  Comments   
+#  -------------------------------------------------------------------
+#  This variable sets wether or not an archive should endorse solid mode
+#  To understand what is solid mode please refer to 7-zip documentation
+#  -------------------------------------------------------------------
+#  Uncomment the following Set-Variable statement and set proper
+#  "<value>" if you want to set the value for the 7zBackup script.
+#  -------------------------------------------------------------------
+# Set-Variable -Name BkArchiveSolid  -Value $True -Scope 1
+# Set-Variable -Name BkArchiveSolid  -Value $False -Scope 1
+#
+
+# --------------------------------------------------------------------
 #  Variable       : BkRotate 
 #  Argument Name  : --rotate
 #  Description    : An integer number greater than 0
