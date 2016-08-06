@@ -238,6 +238,9 @@ $version = "2.0.1-Stable"  # 20160608 Anlan   Code  : Since version 15.x of 7-zi
 $version = "2.0.2-Stable"  # 2016xxxx Anlan   Bug   : Improper output when Send-Notification is invoked
 #                                             Feat  : added --solid switch to enable or disable solid archives
 #                                             Feat  : compression / solid mode / threads can be also set in selection file
+#                                             Code  : adjusted checks on removal of reparse points
+#                                             Code  : adjusted count of maximum threads on single core sockets
+#                                             Feat  : added switch -mhe for password protected archives
 #
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -301,6 +304,7 @@ $helpText = @"
                        [--rotate < number >]
                        [--logfile < filename >]
                        [--pre < filename | `{scriptblock`} >]
+					   [--post < filename | `{scriptblock`} >]
 					   
                        -- Selection specific switches --					   
                        [--maxdepth < number > ]
@@ -319,6 +323,7 @@ $helpText = @"
                        [--threads < number >]
                        [--solid < True | False >]					   
                        [--password < string >]
+                       [--encryptheaders]
                        [--workdir < working directory > OBSOLETE]
 					   
                        -- Notification specific switches --
@@ -679,8 +684,11 @@ Function Make-Junction {
 	If(Test-Path -Path $jTarget) {
 	
 		# Junction it (from alias)
-		Junction ("/accepteula `"{0}`" `"{1}`"" -f $jPath, $jTarget) | Out-Null
-		Write-Output ($LASTEXITCODE -eq 0)
+		CMD /C $BkJunctionBin /accepteula `"$jPath`" `"$jTarget`" | Out-Null
+		Start-Sleep -Milliseconds 10
+		
+		# Test is present
+		Write-Output (Test-Path -Path $jPath)
 		Return
 
 		
@@ -708,7 +716,10 @@ Function Make-SymLink {
 	
 		# Create Link
 		cmd /c ("MKLINK /D `"{0}`" `"{1}`"" -f $jPath, $jTarget) | Out-Null
-		Write-Output ($LASTEXITCODE -eq 0)
+		Start-Sleep -Milliseconds 10
+		
+		# Test is present
+		Write-Output (Test-Path -Path $jPath)
 		Return
 		
 	}
@@ -1018,8 +1029,11 @@ Function Remove-Junction  {
 	If((Test-Path $jPath)) {
 
 		# UnJunction it
-		Junction ("/accepteula -d `"{0}`"" -f $jPath) | Out-Null
-		Write-Output ($LASTEXITCODE -eq 0)
+		CMD /C $BkJunctionBin /accepteula -d `"$jPath`" | Out-Null
+		Start-Sleep --Milliseconds 10
+		
+		# Test is no more present !!
+		Write-Output ((Test-Path -Path $jPath) -eq $False)
 		Return
 		
 	}
@@ -1050,7 +1064,7 @@ Function Remove-RootDir {
 				If(!$junctionsRemoved) {Return}
 			}
 		}
-		If($junctionsRemoved) {
+		If($junctionsRemoved -And (@(Get-ChildItem -Path $rootPath | ? {$_.PsIsContainer}).Count -eq 0) ) {
 			Remove-Item -Path $rootPath -Recurse -Force | Out-Null
 			Write-Output $?
 			Return 
@@ -1078,7 +1092,10 @@ Function Remove-SymLink  {
 
 		# Remove the Link
 		cmd /c ("RD `"{0}`"" -f $jPath)
-		Write-Output ($LASTEXITCODE -eq 0)
+		Start-Sleep -Milliseconds 10
+		
+		# Test is no more present !!
+		Write-Output ((Test-Path -Path $jPath) -eq $False)
 		Return
 		
 	}
@@ -1378,6 +1395,7 @@ Function Validate-Arguments {
 				"--solid"           { Set-Variable -name BkArchiveSolid -value $BkArguments[++$i] -scope Script }
 				"--archivepassword" { Set-Variable -name BkArchivePassword -value $BkArguments[++$i] -scope Script }
 				"--password"        { Set-Variable -name BkArchivePassword -value $BkArguments[++$i] -scope Script }
+				"--encryptheaders"  { Set-Variable -name BkEncryptHeaders -value $True -scope Script }
 				"--rotate"          { Set-Variable -name BkRotate -value $BkArguments[++$i] -scope Script }
 				"--emptydirs"       { Set-Variable -name BkKeepEmptyDirs -value $True -scope Script }
 				"--maxdepth"        { Set-Variable -name BkMaxDepth -value $BkArguments[++$i] -scope Script }
@@ -1438,7 +1456,7 @@ Function Validate-Variables {
 		If([system.boolean]::tryparse($BkClearBit,[ref]$b)) {
 			Set-Variable -name BkClearBit -value $b -scope Script
 		} Else {
-			Write-Output "Provided value for --clearbit argument is not valid boolean value."
+			Write-Output "Value $BkClearBit for --clearbit argument is not valid boolean value."
 			Remove-Variable -name BkClearBit -scope Script
 		}
 		Remove-Variable -name b -scope Local
@@ -1502,7 +1520,7 @@ Function Validate-Variables {
 			((Test-Variable "BkSelectionContents") -eq $False) -Or 
 			($BkSelectionContents.Count -eq 0) -Or
 			!(($BkSelectionContents | Where-Object {$_ -match "^includesource=*"}).Length -gt 0)
-		) { Write-Output "Missing or invalid --selection argument. File does not contain any includesource directive" } 
+		) { Write-Output "Missing or invalid --selection argument: file does not contain any `"includesource`" directive" } 
 		Else 
 		{
 				
@@ -1668,7 +1686,11 @@ Function Validate-Variables {
 			Set-Variable -Name "tmpNumCores" -Value([int]0) -Scope Local
 			# Check number of threads does not exceed number of available cores
 			Get-WmiObject -class win32_processor | ForEach-Object {
-				$tmpNumCores += $_.NumberOfCores
+				If(!$_.NumberOfCores) {
+					$tmpNumCores++ 
+				} Else {
+					$tmpNumCores += $_.NumberOfCores
+				}
 			}
 			If($BkArchiveThreads -gt $tmpNumCores) {
 				Write-Output ("Missing or invalid --threads [{0}] argument. Must not exceed {1}" -f $BkArchiveThreads, $tmpNumCores)
@@ -1848,10 +1870,6 @@ Function Validate-Variables {
 			($BkJunctionBin -match "^\s*$") -Or
 			!(Test-Path -Path $BkJunctionBin -pathType Leaf)
 		) { Write-Output "Missing or invalid --jbin argument" }
-		Else
-		{
-			Set-Alias -name Junction -value $BkJunctionBin -scope Script
-		}
 	}
 	
 }
@@ -2321,7 +2339,11 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		}
 		
 		$Bk7ZipArgs += "-t" + $BkArchiveType												# This is the type of the archive
-		If(Test-Variable "BkArchivePassword") { $Bk7ZipArgs += "-p$BkArchivePassword" }		# This is the password (if any)
+		If(Test-Variable "BkArchivePassword") { 
+			$Bk7ZipArgs += "-p$BkArchivePassword" 											# This is the password (if any)
+			If($BkEncryptHeaders) { $Bk7ZipArgs += "-mhe" }
+			}
+		}		
 		
 		
 		$Bk7ZipArgs += "`"$BkDestFile`""													# This is the destination file
