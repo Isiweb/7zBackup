@@ -245,6 +245,8 @@ $version = "2.0.2-Stable"  # 20160722 Anlan   Bug   : Improper output when Send-
 $version = "2.0.3-Stable"  # 20160809 Anlan   Code  : Reimplemented Set-Alias for Junction.exe binary
 #                                             Code  : Parsing of directives from selection file now takes precedence over
 #                                                     switches and parameters
+$version = "2.0.4-Stable"  # 20161111 Anlan   Code  : Minor code fixes
+#                                             Feat  : Added support for volumized archives
 #
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -326,6 +328,7 @@ $helpText = @"
                        [--compression < 0 | 1 | 3 | 5 | 7 | 9 >]
                        [--threads < number >]
                        [--solid < True | False >]					   
+                       [--volumes {Size}[b | k | m | g]]					   					   
                        [--password < string >]
                        [--encryptheaders]
                        [--workdir < working directory > OBSOLETE]
@@ -386,7 +389,11 @@ $helpText = @"
  --solid       Sets wether or not 7z archives should endorse solid format
                By default 7z archives endorse solid format. Refer to
                7-zip documentation to understand what are solid archives.
- 
+
+ --volumes     This command switch implements the -v switch provided by
+               7-zip. You can pass a single value or a list of values
+			   comma separated.
+  
  --rotate      This value must be a number and indicates the number of
                archives that should remain on disk after successful
                archiving. For example if you set --rotation 3 on a 
@@ -704,8 +711,7 @@ Function Make-Junction {
 	If(Test-Path -Path $jTarget) {
 	
 		# Junction it (from alias)
-		# CMD /C $BkJunctionBin /accepteula `"$jPath`" `"$jTarget`" | Out-Null
-		BkJunctionExe  /accepteula `"$jPath`" `"$jTarget`" | Out-Null
+		Invoke-Expression (('& "{0}" /accepteula "{1}" "{2}"') -f $BkJunctionBin, $jPath, $Target) 
 		Start-Sleep -Milliseconds 10
 		
 		# Test is present
@@ -911,7 +917,7 @@ Function ProcessFolder ($thisFolder) {
 	Write-Progress -Activity ("Folder {0}" -f $thisFolder.RealName) -CurrentOperation "Scanning ... " -Status ("Selected {0,0:n0} out of {1,0:n0} files in {2,0:n0} folders. {3,0:n2} MBytes to backup" -f  $Counters.FilesSelected, $Counters.FilesProcessed, $Counters.FoldersDone, ($Counters.BytesSelected / 1MB ))
 	
 	# If it is an empty directory
-	If($scanThisPathForRecursion -and (!$childFiles.Count) -and ($BkKeepEmptyDirs -eq $True) -and !($childItemsScanErrors)) {
+	If($scanThisPathForRecursion -and (!$childItems.Count) -and ($BkKeepEmptyDirs -eq $True) -and !($childItemsScanErrors)) {
 		
 		# Older versions of 7zip require at least one file to save a folder
 		# Newer versions will simply create the folder
@@ -985,13 +991,13 @@ Function ProcessFolder ($thisFolder) {
 				}
 
 				# Check the file falls into MaxFileSize
-				If(($MaxFileSize) -and ($childFile.Length -gt $MaxFileSize) ) {
+				If(($BkMaxFileSize) -and ($childFile.Length -gt $BkMaxFileSize) ) {
 					$SWriters.Exclusions.WriteLine([string]("{0}`t{1}`t{2}`t{3}" -f $Counters.Exclusions++, "maxfilesize", "F", $childFileRealName))
 					continue
 				}
 
 				# Check the file falls into MinFileSize
-				If(($MinFileSize) -and ($childFile.Length -lt $MinFileSize) ) {
+				If(($BkMinFileSize) -and ($childFile.Length -lt $BkMinFileSize) ) {
 					$SWriters.Exclusions.WriteLine([string]("{0}`t{1}`t{2}`t{3}" -f $Counters.Exclusions++, "minfilesize", "F", $childFileRealName))
 					continue
 				}
@@ -1053,8 +1059,7 @@ Function Remove-Junction  {
 	If((Test-Path $jPath)) {
 
 		# UnJunction it
-		# CMD /C $BkJunctionBin /accepteula -d `"$jPath`" | Out-Null
-		BkJunctionExe /accepteula -d `"$jPath`" | Out-Null
+		Invoke-Expression (('& "{0}" /accepteula -d "{1}"') -f $BkJunctionBin, $jPath) 
 		Start-Sleep --Milliseconds 10
 		
 		# Test is no more present !!
@@ -1418,6 +1423,7 @@ Function Validate-Arguments {
 				"--compression"     { Set-Variable -name BkArchiveCompression -value $BkArguments[++$i] -scope Script }
 				"--threads"         { Set-Variable -name BkArchiveThreads -value $BkArguments[++$i] -scope Script }
 				"--solid"           { Set-Variable -name BkArchiveSolid -value $BkArguments[++$i] -scope Script }
+				"--volumes"         { Set-Variable -name BkArchiveVolumes -value $BkArguments[++$i] -scope Script }
 				"--archivepassword" { Set-Variable -name BkArchivePassword -value $BkArguments[++$i] -scope Script }
 				"--password"        { Set-Variable -name BkArchivePassword -value $BkArguments[++$i] -scope Script }
 				"--encryptheaders"  { Set-Variable -name BkEncryptHeaders -value $True -scope Script }
@@ -1583,7 +1589,7 @@ Function Validate-Variables {
 			
 			# Look for Solid mode
 			$BkArchiveSolid | ? {$_ -match "^solid=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveSolid" -Value $_.Value}
-			
+
 		}
 	}
 
@@ -1641,7 +1647,7 @@ Function Validate-Variables {
 	# --------------------------------------------------------------------------------------------------------------------------
 	# Destination path given and existent
 	If(
-		!(Test-Variable "BkDestPath") -Or
+		!($BkDestPath) -Or
 		($BkDestPath -match "^\s*$") -Or
 		!(Test-Path $BkDestPath -pathType Container) -Or
 		!(Check-FsAttribute $BkDestPath "Directory") -Or
@@ -1699,7 +1705,14 @@ Function Validate-Variables {
 		Set-Variable -name "BkArchiveSolid" -value $True -scope Script
 	}
 	
-	
+	# --------------------------------------------------------------------------------------------------------------------------
+	# Volumes archive policy - Checks
+	# --------------------------------------------------------------------------------------------------------------------------
+	If((Test-Variable "BkArchiveVolumes") -eq $True) {
+		If(!($BkArchiveVolumes -is [array])) { $BkArchiveVolumes = @($BkArchiveVolumes) }
+		$BkArchiveVolumes | ForEach-Object { If($_ -notmatch "\d+[b|k|m|g]") { Write-Output ("Missing or invalid --volumes argument {0} " -f $_) } }
+	} 
+
 	# --------------------------------------------------------------------------------------------------------------------------
 	# Threading - Checks
 	# --------------------------------------------------------------------------------------------------------------------------
@@ -1896,8 +1909,6 @@ Function Validate-Variables {
 			!(Test-Path -Path $BkJunctionBin -pathType Leaf)
 		) 
 			{ Write-Output "Missing or invalid --jbin argument" }
-		Else 
-			{ Set-Alias -Name BkJunctionExe -Value $BkJunctionBin -Scope Script }
 	}
 	
 }
@@ -2365,7 +2376,14 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		If(($BkArchiveType -eq "7z") -And !($BkArchiveSolid)) {
 			$Bk7ZipArgs += "-ms=off"													    # Disable solid archive
 		}
-		
+	
+		# Control volumes																	# Apply Volumes Policies
+		If((Test-Variable "BkArchiveVolumes") -eq $True) {
+			$BkArchiveVolumes | ForEach-Object {
+				$Bk7ZipArgs += ("-v{0}" -f $_)
+			}
+		}
+	
 		$Bk7ZipArgs += "-t" + $BkArchiveType												# This is the type of the archive
 		If(Test-Variable "BkArchivePassword") { 
 			$Bk7ZipArgs += "-p$BkArchivePassword" 											# This is the password (if any)
@@ -2415,11 +2433,16 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		
 		# Begin polling Process
 		While (!($oProcess.HasExited)) {
-			Start-Sleep -Milliseconds 2000
+			Start-Sleep -Milliseconds 2500
 			$Status = "Waiting for archive ..."
-			Get-Item -LiteralPath $BkDestFile | ForEach-Object {
-				$Status = "Archive Size {0,0:n2} MByte. so far ..." -f ($_.Length / 1Mb)
-			}
+			$ArchiveSize = 0
+			Get-ChildItem -Path $BkDestPath -Filter ("{0}*" -f $BkArchiveName) | ?{ !$_.PSIscontainer } | ForEach-Object { $ArchiveSize += $_.Length }
+			If ( $ArchiveSize -gt 0 ) { $Status = "Archive Size {0,0:n2} MByte. so far ..." -f ($ArchiveSize / 1Mb) }
+			
+			# Get-Item -LiteralPath $BkDestFile | ForEach-Object {
+				# $Status = "Archive Size {0,0:n2} MByte. so far ..." -f ($_.Length / 1Mb)
+			# }
+			
 			Write-Progress -Activity "Archiving into $BkDestFile" -Status $Status -CurrentOperation "Please wait ..."
 			If(Check-CTRLCRequest -eq $True) {
 				[void]$oProcess.Kill()
@@ -2467,21 +2490,21 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 			Trace " "
 		}
 		
-		
+		# Check overall size of archive (including volumes if present)
+		$ArchiveSize = 0
+		Get-ChildItem -Path $BkDestPath -Filter ("{0}*" -f $BkArchiveName) | ?{ !$_.PSIscontainer } | ForEach-Object { $ArchiveSize += $_.Length }
+
 		# Check exit code by 7zip - If ErrorLevel is <2 then we assume backup
 		# process completed successfully
-		If(($Bk7ZipRetc -lt 2) -and (Test-Path -Path $BkDestFile -PathType Leaf) -and !(Check-CTRLCRequest)) {
+		If(($Bk7ZipRetc -lt 2) -and ($ArchiveSize -gt 0) -and !(Check-CTRLCRequest)) {
 			
 			# Output informations in log file 
-			Get-Item -Path $BkDestFile | ForEach-Object {
+			Trace " Created $BkArchiveName in $BkDestPath "
+			Trace (" Archive Size {0,0:n2} MB = {1,2:n2}% of original size" -f ($ArchiveSize / 1Mb), ((($ArchiveSize / $Counters.BytesSelected)) * 100))
+			Trace (" Completed in {0,0:n0} days, {1,0:n0} hours, {2,0:n0} minutes, {3,0:n3} seconds" -f $MyContext.CompressionElapsed.Days, $MyContext.CompressionElapsed.Hours, $MyContext.CompressionElapsed.Minutes, ($MyContext.CompressionElapsed.Seconds + $MyContext.CompressionElapsed.Milliseconds / 1000) )
+			Trace (" Perfomance {0,0:n2} MB/Sec." -f (($Counters.BytesSelected / $MyContext.CompressionElapsed.TotalSeconds) / 1MB))
+			Trace " "
 				
-				Trace " Created $BkArchiveName in $BkDestPath "
-				Trace (" Archive Size {0,0:n2} MB = {1,2:n2}% of original size" -f ($_.Length / 1MB), ((($_.Length / $Counters.BytesSelected)) * 100))
-				Trace (" Completed in {0,0:n0} days, {1,0:n0} hours, {2,0:n0} minutes, {3,0:n3} seconds" -f $MyContext.CompressionElapsed.Days, $MyContext.CompressionElapsed.Hours, $MyContext.CompressionElapsed.Minutes, ($MyContext.CompressionElapsed.Seconds + $MyContext.CompressionElapsed.Milliseconds / 1000) )
-				Trace (" Perfomance {0,0:n2} MB/Sec." -f (($Counters.BytesSelected / $MyContext.CompressionElapsed.TotalSeconds) / 1MB))
-				Trace " "
-				
-			}
 			
 			# Do Post Archiving
 			If(!(Check-CTRLCRequest)) { PostArchiving ; }
@@ -2494,17 +2517,22 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 			If(!(Check-CTRLCRequest)) {
 				If(!(Test-Variable "BkRotate")) { Set-Variable -name "BkRotate" -value ([int]9999) -scope Script }
 				If(($BkRotate -ge 1)) {
-					$fileNameRgx = "$BkArchivePrefix-$BkType-[0-9]{8}-[0-9]{4,6}\.(7z|zip|tar)"
+					$fileNameRgx = ("$([Regex]::Escape($BkArchivePrefix))-$BkType-[0-9]{8}-[0-9]{4,6}\.(7z|zip|tar)(\.\d{3})?")
 					Trace " Archives in $BkDestPath"
 					Trace " ------------------------------------------------------------------------------"
-					Get-ChildItem $BkDestPath | ?{ $_.Name -match $fileNameRgx -and !$_.PSIscontainer } | sort @{expression={$_.LastWriteTime};Descending=$true} | foreach-object {
+					Get-ChildItem $BkDestPath | ?{ $_.Name -match $fileNameRgx -and !$_.PSIscontainer } | sort @{expression={$_.Name};Descending=$true} | foreach-object {
 						If(!($BkRotate -le 0)) { 
-							If ($_.Name -eq $BkArchiveName) {
+							If ($_.Name -match ([Regex]::Escape($BkArchiveName))) {
 								Trace (" New      : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) )
 							} Else {
 								Trace (" Kept     : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) )
 							}
-							$BkRotate += -1
+							
+							# Check is volumized archive
+							If ( (($_.Name -match "(.*)(7z|zip|tar)\.\d{3}$") -and ($_.Name.EndsWith("001"))) -or ($_.Name -match "(.*)(7z|zip|tar)$") ) {
+								$BkRotate += -1
+							} 
+							
 						} Else {
 							remove-item -LiteralPath (Join-Path $BkDestPath $_.Name) -ErrorAction "SilentlyContinue" | Out-Null
 							if ($?) { Trace (" Removed  : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) ) } Else { Trace " WARNING Failed to remove $_.Name"}
