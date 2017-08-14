@@ -235,12 +235,18 @@ $version = "2.0.1-Stable"  # 20160608 Anlan   Code  : Since version 15.x of 7-zi
 #                                             Feat  : --pre and --post switches can invoke pws actions
 #                                             Feat  : --threads switch can control resource usage by 7-zip
 #
-$version = "2.0.2-Stable"  # 2016xxxx Anlan   Bug   : Improper output when Send-Notification is invoked
+$version = "2.0.2-Stable"  # 20160722 Anlan   Bug   : Improper output when Send-Notification is invoked
 #                                             Feat  : added --solid switch to enable or disable solid archives
 #                                             Feat  : compression / solid mode / threads can be also set in selection file
 #                                             Code  : adjusted checks on removal of reparse points
 #                                             Code  : adjusted count of maximum threads on single core sockets
 #                                             Feat  : added switch -mhe for password protected archives
+#
+$version = "2.0.3-Stable"  # 20160809 Anlan   Code  : Reimplemented Set-Alias for Junction.exe binary
+#                                             Code  : Parsing of directives from selection file now takes precedence over
+#                                                     switches and parameters
+$version = "2.0.4-Stable"  # 20161111 Anlan   Code  : Minor code fixes
+#                                             Feat  : Added support for volumized archives
 #
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -322,6 +328,7 @@ $helpText = @"
                        [--compression < 0 | 1 | 3 | 5 | 7 | 9 >]
                        [--threads < number >]
                        [--solid < True | False >]					   
+                       [--volumes {Size}[b | k | m | g]]					   					   
                        [--password < string >]
                        [--encryptheaders]
                        [--workdir < working directory > OBSOLETE]
@@ -382,7 +389,11 @@ $helpText = @"
  --solid       Sets wether or not 7z archives should endorse solid format
                By default 7z archives endorse solid format. Refer to
                7-zip documentation to understand what are solid archives.
- 
+
+ --volumes     This command switch implements the -v switch provided by
+               7-zip. You can pass a single value or a list of values
+			   comma separated.
+  
  --rotate      This value must be a number and indicates the number of
                archives that should remain on disk after successful
                archiving. For example if you set --rotation 3 on a 
@@ -581,6 +592,8 @@ Function Clear-FsAttribute {
 	If($BkDryRun) { Write-Output $True; Return }
 	
 	# Lower attribute bit
+	# TO-DO ... extremely slow
+	
 	$item = (Get-Item -LiteralPath $fileFullName -Force)
 	If(!($?)) {
 		Write-Output $False
@@ -592,6 +605,20 @@ Function Clear-FsAttribute {
 		}
 		Write-Output $True
 	}
+	
+	# If(([System.IO.File]::Exists($fileFullName))) {
+		# Try {
+			# If((([System.IO.File]::GetAttributes($fileFullName)) -band ([System.IO.FileAttributes]::$attrName))) { 
+				# [System.IO.File]::SetAttributes($fileFullName, (([System.IO.File]::GetAttributes($fileFullName)) -bxor ([System.IO.FileAttributes]::$attrName)))
+			# }
+			# Write-Output $True
+		# } 
+		# Catch {
+			# Write-Output $False
+		# }
+	# } Else {
+		# Write-Output $False
+	# }
 
 } 
 
@@ -684,7 +711,7 @@ Function Make-Junction {
 	If(Test-Path -Path $jTarget) {
 	
 		# Junction it (from alias)
-		CMD /C $BkJunctionBin /accepteula `"$jPath`" `"$jTarget`" | Out-Null
+		Invoke-Expression (('& "{0}" /accepteula "{1}" "{2}"') -f $BkJunctionBin, $jPath, $Target) 
 		Start-Sleep -Milliseconds 10
 		
 		# Test is present
@@ -775,7 +802,8 @@ Function PostArchiving {
 	}
 	If(
 		(Check-CTRLCRequest) -Or
-		(($BkType -ne "move") -And !($BkClearBit))
+		(($BkType -ne "move") -And !($BkClearBit)) -Or
+		($BkDryRun)
 	) { Return; }
 
 	# Load compress details data with respect of different log formats for different 7zip versions
@@ -791,13 +819,15 @@ Function PostArchiving {
 		(Check-CTRLCRequest)
 	) { Return }
 	
-	# Remove files successfully archived if necessary
+	# Remove  or clear files successfully archived if necessary
 	Trace " Post Processing Successfully Archived Files"
 	Trace " -------------------------------------------"
 	$MyContext.PostProcessFilesStart = Get-Date
 	Set-Variable -Name "ArchivedItemsCount" -Value ($BkCompressDetailItems.Count) -Scope Local
 	Set-Variable -Name "OperationType" -Value "Clearing" -Scope Local
 	If($BkType -eq "move") {$OperationType = "Removing"}
+	
+	$archiveAttr = [System.IO.FileAttributes]::Archive
 	
 	For ($i=0; $i -lt $ArchivedItemsCount; $i++) {
 		If(Check-CTRLCRequest -eq $True) { break; }
@@ -809,8 +839,8 @@ Function PostArchiving {
 				$item | ? { !$_.PSIsContainer } | Remove-Item -Force | Out-Null
 				If(!($?)) {Trace (" Could not remove file : {0}" -f $itemName ); $Counters.Warnings++  }
 			} Else {
-				If(($item.Attributes -band [System.IO.FileAttributes]::Archive)) {
-					$item = ( $item | Set-ItemProperty -Name Attributes -Value ($item.Attributes -bXor [System.IO.FileAttributes]::Archive) -Force -PassThru)
+				If(($item.Attributes -band $archiveAttr)) {
+					$item = ( $item | Set-ItemProperty -Name Attributes -Value ($item.Attributes -bXor $archiveAttr) -Force -PassThru)
 					If(!($?)) {
 						Trace (" Could not clear archive attribute : {0}" -f $item.FullName ); $Counters.Warnings++
 					}
@@ -887,7 +917,7 @@ Function ProcessFolder ($thisFolder) {
 	Write-Progress -Activity ("Folder {0}" -f $thisFolder.RealName) -CurrentOperation "Scanning ... " -Status ("Selected {0,0:n0} out of {1,0:n0} files in {2,0:n0} folders. {3,0:n2} MBytes to backup" -f  $Counters.FilesSelected, $Counters.FilesProcessed, $Counters.FoldersDone, ($Counters.BytesSelected / 1MB ))
 	
 	# If it is an empty directory
-	If($scanThisPathForRecursion -and (!$childFiles.Count) -and ($BkKeepEmptyDirs -eq $True) -and !($childItemsScanErrors)) {
+	If($scanThisPathForRecursion -and (!$childItems.Count) -and ($BkKeepEmptyDirs -eq $True) -and !($childItemsScanErrors)) {
 		
 		# Older versions of 7zip require at least one file to save a folder
 		# Newer versions will simply create the folder
@@ -961,13 +991,13 @@ Function ProcessFolder ($thisFolder) {
 				}
 
 				# Check the file falls into MaxFileSize
-				If(($MaxFileSize) -and ($childFile.Length -gt $MaxFileSize) ) {
+				If(($BkMaxFileSize) -and ($childFile.Length -gt $BkMaxFileSize) ) {
 					$SWriters.Exclusions.WriteLine([string]("{0}`t{1}`t{2}`t{3}" -f $Counters.Exclusions++, "maxfilesize", "F", $childFileRealName))
 					continue
 				}
 
 				# Check the file falls into MinFileSize
-				If(($MinFileSize) -and ($childFile.Length -lt $MinFileSize) ) {
+				If(($BkMinFileSize) -and ($childFile.Length -lt $BkMinFileSize) ) {
 					$SWriters.Exclusions.WriteLine([string]("{0}`t{1}`t{2}`t{3}" -f $Counters.Exclusions++, "minfilesize", "F", $childFileRealName))
 					continue
 				}
@@ -1029,7 +1059,7 @@ Function Remove-Junction  {
 	If((Test-Path $jPath)) {
 
 		# UnJunction it
-		CMD /C $BkJunctionBin /accepteula -d `"$jPath`" | Out-Null
+		Invoke-Expression (('& "{0}" /accepteula -d "{1}"') -f $BkJunctionBin, $jPath) 
 		Start-Sleep --Milliseconds 10
 		
 		# Test is no more present !!
@@ -1393,6 +1423,7 @@ Function Validate-Arguments {
 				"--compression"     { Set-Variable -name BkArchiveCompression -value $BkArguments[++$i] -scope Script }
 				"--threads"         { Set-Variable -name BkArchiveThreads -value $BkArguments[++$i] -scope Script }
 				"--solid"           { Set-Variable -name BkArchiveSolid -value $BkArguments[++$i] -scope Script }
+				"--volumes"         { Set-Variable -name BkArchiveVolumes -value $BkArguments[++$i] -scope Script }
 				"--archivepassword" { Set-Variable -name BkArchivePassword -value $BkArguments[++$i] -scope Script }
 				"--password"        { Set-Variable -name BkArchivePassword -value $BkArguments[++$i] -scope Script }
 				"--encryptheaders"  { Set-Variable -name BkEncryptHeaders -value $True -scope Script }
@@ -1528,37 +1559,37 @@ Function Validate-Variables {
 			#$BkSelectionContents | Where-Object {$_ -match "^useswitches=*"} | ForEach-Object { Set-Variable -name "Bk7ZipSwitches" -value ($_.Substring($_.IndexOf("=") + 1)) -scope Script }
 
 			# Look whether selection contents holds specific maxdepth value to use.
-			If(!(Test-Variable "BkMaxDepth")) {$BkSelectionContents | Where-Object {$_ -match "^maxdepth=[0-9]"} | ForEach-Object { Set-Variable -name "BkMaxDepth" -value ($_.Substring($_.IndexOf("=") + 1)) -scope Script }}
+			$BkSelectionContents | Where-Object {$_ -match "^maxdepth=[0-9]"} | ForEach-Object { Set-Variable -name "BkMaxDepth" -value ($_.Substring($_.IndexOf("=") + 1)) -scope Script }
 			
 			# Look whether selection contents holds specific rotate value to use.
-			If(!(Test-Variable "BkRotate")) {$BkSelectionContents | Where-Object {$_ -match "^rotate=[0-9]"} | ForEach-Object { Set-Variable -name "BkRotate" -value ($_.Substring($_.IndexOf("=") + 1)) -scope Script }}
+			$BkSelectionContents | Where-Object {$_ -match "^rotate=[0-9]"} | ForEach-Object { Set-Variable -name "BkRotate" -value ($_.Substring($_.IndexOf("=") + 1)) -scope Script }
 			
 			# Look whether selection contents holds specific prefix value to use.
-			If(!(Test-Variable "BkArchivePrefix")) {$BkSelectionContents | Where-Object {$_ -match "^prefix=*"} | ForEach-Object { Set-Variable -name "BkArchivePrefix" -value ($_.Substring($_.IndexOf("=") + 1)) -scope Script }}
+			$BkSelectionContents | Where-Object {$_ -match "^prefix=*"} | ForEach-Object { Set-Variable -name "BkArchivePrefix" -value ($_.Substring($_.IndexOf("=") + 1)) -scope Script }
 
 			# Look whether selection contents sets the keeping of empty dirs.
-			If(!(Test-Variable "BkKeepEmptyDirs")) {$BkSelectionContents | Where-Object {$_ -match "^emptydirs$"} | ForEach-Object { Set-Variable -name "BkKeepEmptyDirs" -value $True -scope Script }}
+			$BkSelectionContents | Where-Object {$_ -match "^emptydirs$"} | ForEach-Object { Set-Variable -name "BkKeepEmptyDirs" -value $True -scope Script }
 
 			# Look whether selection contents sets following of junctions
-			If(!(Test-Variable "BkNoFollowJunctions")) {$BkSelectionContents | Where-Object {$_ -match "^nofollowjunctions$"} | ForEach-Object { Set-Variable -name "BkNoFollowJunctions" -value $True -scope Script }}
+			$BkSelectionContents | Where-Object {$_ -match "^nofollowjunctions$"} | ForEach-Object { Set-Variable -name "BkNoFollowJunctions" -value $True -scope Script }
 			
 			# Look whether selection contents sets max/min file sizes
-			If (!(Test-Variable "BkMaxFileSize")) { $BkSelectionContents | ? {$_ -match "^maxfilesize=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMaxFileSize" -Value $_.Value} }
-			If (!(Test-Variable "BkMinFileSize")) { $BkSelectionContents | ? {$_ -match "^minfilesize=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMinFileSize" -Value $_.Value} }
+			$BkSelectionContents | ? {$_ -match "^maxfilesize=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMaxFileSize" -Value $_.Value}
+			$BkSelectionContents | ? {$_ -match "^minfilesize=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMinFileSize" -Value $_.Value}
 
 			# Look whether selection contents sets max/min file ages
-			If (!(Test-Variable "BkMaxFileAge")) { 	$BkSelectionContents | ? {$_ -match "^maxfileage=\d+(\,|\.)\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMaxFileAge" -Value $_.Value} }
-			If (!(Test-Variable "BkMinFileAge")) { 	$BkSelectionContents | ? {$_ -match "^minfileage=\d+(\,|\.)\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMinFileAge" -Value $_.Value} }
+			$BkSelectionContents | ? {$_ -match "^maxfileage=\d+(\,|\.)\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMaxFileAge" -Value $_.Value}
+			$BkSelectionContents | ? {$_ -match "^minfileage=\d+(\,|\.)\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMinFileAge" -Value $_.Value}
 			
 			# Look for compression
-			If (!(Test-Variable "BkArchiveCompression"))  {	$BkArchiveCompression | ? {$_ -match "^compression=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveCompression" -Value $_.Value} } 
+			$BkArchiveCompression | ? {$_ -match "^compression=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveCompression" -Value $_.Value}
 
 			# Look for threads
-			If (!(Test-Variable "BkArchiveThreads"))  {	$BkArchiveThreads | ? {$_ -match "^threads=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveThreads" -Value $_.Value} } 
+			$BkArchiveThreads | ? {$_ -match "^threads=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveThreads" -Value $_.Value}
 			
 			# Look for Solid mode
-			If (!(Test-Variable "BkArchiveSolid"))  {	$BkArchiveSolid | ? {$_ -match "^solid=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveSolid" -Value $_.Value} } 
-			
+			$BkArchiveSolid | ? {$_ -match "^solid=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveSolid" -Value $_.Value}
+
 		}
 	}
 
@@ -1616,7 +1647,7 @@ Function Validate-Variables {
 	# --------------------------------------------------------------------------------------------------------------------------
 	# Destination path given and existent
 	If(
-		!(Test-Variable "BkDestPath") -Or
+		!($BkDestPath) -Or
 		($BkDestPath -match "^\s*$") -Or
 		!(Test-Path $BkDestPath -pathType Container) -Or
 		!(Check-FsAttribute $BkDestPath "Directory") -Or
@@ -1674,7 +1705,14 @@ Function Validate-Variables {
 		Set-Variable -name "BkArchiveSolid" -value $True -scope Script
 	}
 	
-	
+	# --------------------------------------------------------------------------------------------------------------------------
+	# Volumes archive policy - Checks
+	# --------------------------------------------------------------------------------------------------------------------------
+	If((Test-Variable "BkArchiveVolumes") -eq $True) {
+		If(!($BkArchiveVolumes -is [array])) { $BkArchiveVolumes = @($BkArchiveVolumes) }
+		$BkArchiveVolumes | ForEach-Object { If($_ -notmatch "\d+[b|k|m|g]") { Write-Output ("Missing or invalid --volumes argument {0} " -f $_) } }
+	} 
+
 	# --------------------------------------------------------------------------------------------------------------------------
 	# Threading - Checks
 	# --------------------------------------------------------------------------------------------------------------------------
@@ -1869,7 +1907,8 @@ Function Validate-Variables {
 			!(Test-Variable "BkJunctionBin") -Or
 			($BkJunctionBin -match "^\s*$") -Or
 			!(Test-Path -Path $BkJunctionBin -pathType Leaf)
-		) { Write-Output "Missing or invalid --jbin argument" }
+		) 
+			{ Write-Output "Missing or invalid --jbin argument" }
 	}
 	
 }
@@ -2337,13 +2376,19 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		If(($BkArchiveType -eq "7z") -And !($BkArchiveSolid)) {
 			$Bk7ZipArgs += "-ms=off"													    # Disable solid archive
 		}
-		
+	
+		# Control volumes																	# Apply Volumes Policies
+		If((Test-Variable "BkArchiveVolumes") -eq $True) {
+			$BkArchiveVolumes | ForEach-Object {
+				$Bk7ZipArgs += ("-v{0}" -f $_)
+			}
+		}
+	
 		$Bk7ZipArgs += "-t" + $BkArchiveType												# This is the type of the archive
 		If(Test-Variable "BkArchivePassword") { 
 			$Bk7ZipArgs += "-p$BkArchivePassword" 											# This is the password (if any)
 			If($BkEncryptHeaders) { $Bk7ZipArgs += "-mhe" }
-			}
-		}		
+		}
 		
 		
 		$Bk7ZipArgs += "`"$BkDestFile`""													# This is the destination file
@@ -2388,11 +2433,16 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		
 		# Begin polling Process
 		While (!($oProcess.HasExited)) {
-			Start-Sleep -Milliseconds 2000
+			Start-Sleep -Milliseconds 2500
 			$Status = "Waiting for archive ..."
-			Get-Item -LiteralPath $BkDestFile | ForEach-Object {
-				$Status = "Archive Size {0,0:n2} MByte. so far ..." -f ($_.Length / 1Mb)
-			}
+			$ArchiveSize = 0
+			Get-ChildItem -Path $BkDestPath -Filter ("{0}*" -f $BkArchiveName) | ?{ !$_.PSIscontainer } | ForEach-Object { $ArchiveSize += $_.Length }
+			If ( $ArchiveSize -gt 0 ) { $Status = "Archive Size {0,0:n2} MByte. so far ..." -f ($ArchiveSize / 1Mb) }
+			
+			# Get-Item -LiteralPath $BkDestFile | ForEach-Object {
+				# $Status = "Archive Size {0,0:n2} MByte. so far ..." -f ($_.Length / 1Mb)
+			# }
+			
 			Write-Progress -Activity "Archiving into $BkDestFile" -Status $Status -CurrentOperation "Please wait ..."
 			If(Check-CTRLCRequest -eq $True) {
 				[void]$oProcess.Kill()
@@ -2440,21 +2490,21 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 			Trace " "
 		}
 		
-		
+		# Check overall size of archive (including volumes if present)
+		$ArchiveSize = 0
+		Get-ChildItem -Path $BkDestPath -Filter ("{0}*" -f $BkArchiveName) | ?{ !$_.PSIscontainer } | ForEach-Object { $ArchiveSize += $_.Length }
+
 		# Check exit code by 7zip - If ErrorLevel is <2 then we assume backup
 		# process completed successfully
-		If(($Bk7ZipRetc -lt 2) -and (Test-Path -Path $BkDestFile -PathType Leaf) -and !(Check-CTRLCRequest)) {
+		If(($Bk7ZipRetc -lt 2) -and ($ArchiveSize -gt 0) -and !(Check-CTRLCRequest)) {
 			
 			# Output informations in log file 
-			Get-Item -Path $BkDestFile | ForEach-Object {
+			Trace " Created $BkArchiveName in $BkDestPath "
+			Trace (" Archive Size {0,0:n2} MB = {1,2:n2}% of original size" -f ($ArchiveSize / 1Mb), ((($ArchiveSize / $Counters.BytesSelected)) * 100))
+			Trace (" Completed in {0,0:n0} days, {1,0:n0} hours, {2,0:n0} minutes, {3,0:n3} seconds" -f $MyContext.CompressionElapsed.Days, $MyContext.CompressionElapsed.Hours, $MyContext.CompressionElapsed.Minutes, ($MyContext.CompressionElapsed.Seconds + $MyContext.CompressionElapsed.Milliseconds / 1000) )
+			Trace (" Perfomance {0,0:n2} MB/Sec." -f (($Counters.BytesSelected / $MyContext.CompressionElapsed.TotalSeconds) / 1MB))
+			Trace " "
 				
-				Trace " Created $BkArchiveName in $BkDestPath "
-				Trace (" Archive Size {0,0:n2} MB = {1,2:n2}% of original size" -f ($_.Length / 1MB), ((($_.Length / $Counters.BytesSelected)) * 100))
-				Trace (" Completed in {0,0:n0} days, {1,0:n0} hours, {2,0:n0} minutes, {3,0:n3} seconds" -f $MyContext.CompressionElapsed.Days, $MyContext.CompressionElapsed.Hours, $MyContext.CompressionElapsed.Minutes, ($MyContext.CompressionElapsed.Seconds + $MyContext.CompressionElapsed.Milliseconds / 1000) )
-				Trace (" Perfomance {0,0:n2} MB/Sec." -f (($Counters.BytesSelected / $MyContext.CompressionElapsed.TotalSeconds) / 1MB))
-				Trace " "
-				
-			}
 			
 			# Do Post Archiving
 			If(!(Check-CTRLCRequest)) { PostArchiving ; }
@@ -2467,17 +2517,22 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 			If(!(Check-CTRLCRequest)) {
 				If(!(Test-Variable "BkRotate")) { Set-Variable -name "BkRotate" -value ([int]9999) -scope Script }
 				If(($BkRotate -ge 1)) {
-					$fileNameRgx = "$BkArchivePrefix-$BkType-[0-9]{8}-[0-9]{4,6}\.(7z|zip|tar)"
+					$fileNameRgx = ("$([Regex]::Escape($BkArchivePrefix))-$BkType-[0-9]{8}-[0-9]{4,6}\.(7z|zip|tar)(\.\d{3})?")
 					Trace " Archives in $BkDestPath"
 					Trace " ------------------------------------------------------------------------------"
-					Get-ChildItem $BkDestPath | ?{ $_.Name -match $fileNameRgx -and !$_.PSIscontainer } | sort @{expression={$_.LastWriteTime};Descending=$true} | foreach-object {
+					Get-ChildItem $BkDestPath | ?{ $_.Name -match $fileNameRgx -and !$_.PSIscontainer } | sort @{expression={$_.Name};Descending=$true} | foreach-object {
 						If(!($BkRotate -le 0)) { 
-							If ($_.Name -eq $BkArchiveName) {
+							If ($_.Name -match ([Regex]::Escape($BkArchiveName))) {
 								Trace (" New      : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) )
 							} Else {
 								Trace (" Kept     : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) )
 							}
-							$BkRotate += -1
+							
+							# Check is volumized archive
+							If ( (($_.Name -match "(.*)(7z|zip|tar)\.\d{3}$") -and ($_.Name.EndsWith("001"))) -or ($_.Name -match "(.*)(7z|zip|tar)$") ) {
+								$BkRotate += -1
+							} 
+							
 						} Else {
 							remove-item -LiteralPath (Join-Path $BkDestPath $_.Name) -ErrorAction "SilentlyContinue" | Out-Null
 							if ($?) { Trace (" Removed  : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) ) } Else { Trace " WARNING Failed to remove $_.Name"}

@@ -179,7 +179,7 @@ Set-Variable -Name BkArchiveType -Value "7z" -Scope 1
 #
 # Set-Variable -Name "tmpNumCores" -Value([int]0) -Scope Local
 # Get-WmiObject -class win32_processor | ForEach-Object {$tmpNumCores += $_.NumberOfCores}
-# Set-Variable -Name BkArchiveThreads -Value [int]($tmpNumCores * .8) -Scope 1
+# Set-Variable -Name BkArchiveThreads -Value ([int]($tmpNumCores * .8)) -Scope 1
 # Remove-Variable -Name "tmpNumCores"
 
 # --------------------------------------------------------------------
