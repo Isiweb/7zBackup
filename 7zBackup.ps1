@@ -833,7 +833,7 @@ Function PostArchiving {
 		If(Check-CTRLCRequest -eq $True) { break; }
 		$percentCompleted = ( $i / ($ArchivedItemsCount - 1) * 100 )
 		Write-Progress -Activity  "Performing post archive operations" -Status "Please wait ..." -CurrentOperation ("{0} successfully archived files" -f $OperationType)  -PercentComplete $percentCompleted
-		$item = Get-Item -LiteralPath (Join-Path $BkRootDir $BkCompressDetailItems[$i].File)
+		$item = Get-Item -LiteralPath (Join-Path $BkRootDir $BkCompressDetailItems[$i].File) -Force
 		if($? -and $item) {
 			If($BkType -eq "move") {
 				$item | ? { !$_.PSIsContainer } | Remove-Item -Force | Out-Null
