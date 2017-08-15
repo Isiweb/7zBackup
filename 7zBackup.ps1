@@ -1083,6 +1083,8 @@ Function Remove-Junction  {
 Function Remove-RootDir {
 	param([string]$rootPath = $(throw "You must provide a path to the directory")) 
 	
+	Write-Debug "About to remove root-dir"
+	
 	If (Test-Path -Path $rootPath -PathType Container) {
 		Set-Variable -Name "junctionsRemoved" -Value $True -Scope Private | Out-Null
 		Get-ChildItem -Path $rootPath | ? { $_.Attributes -band 1024 } | ForEach-Object {
@@ -2404,6 +2406,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		$oProcessStartInfo.UseShellExecute = $false
 		$oProcessStartInfo.CreateNoWindow = $true
 		$oProcessStartInfo.Arguments = ($Bk7ZipArgs -join " ")
+		Write-Verbose "7z arguments:  $($Bk7ZipArgs -join ' ')"
 		$oProcess = New-Object -Typename System.Diagnostics.Process
 		$oProcess.StartInfo = $oProcessStartInfo
 		
