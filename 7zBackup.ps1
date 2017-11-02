@@ -833,7 +833,7 @@ Function PostArchiving {
 		If(Check-CTRLCRequest -eq $True) { break; }
 		$percentCompleted = ( $i / ($ArchivedItemsCount - 1) * 100 )
 		Write-Progress -Activity  "Performing post archive operations" -Status "Please wait ..." -CurrentOperation ("{0} successfully archived files" -f $OperationType)  -PercentComplete $percentCompleted
-		$item = Get-Item -LiteralPath (Join-Path $BkRootDir $BkCompressDetailItems[$i].File)
+		$item = Get-Item -LiteralPath (Join-Path $BkRootDir $BkCompressDetailItems[$i].File) -Force
 		if($? -and $item) {
 			If($BkType -eq "move") {
 				$item | ? { !$_.PSIsContainer } | Remove-Item -Force | Out-Null
@@ -1082,6 +1082,8 @@ Function Remove-Junction  {
 # -----------------------------------------------------------------------------
 Function Remove-RootDir {
 	param([string]$rootPath = $(throw "You must provide a path to the directory")) 
+	
+	Write-Debug "About to remove root-dir"
 	
 	If (Test-Path -Path $rootPath -PathType Container) {
 		Set-Variable -Name "junctionsRemoved" -Value $True -Scope Private | Out-Null
@@ -2404,6 +2406,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		$oProcessStartInfo.UseShellExecute = $false
 		$oProcessStartInfo.CreateNoWindow = $true
 		$oProcessStartInfo.Arguments = ($Bk7ZipArgs -join " ")
+		Write-Verbose "7z arguments:  $($Bk7ZipArgs -join ' ')"
 		$oProcess = New-Object -Typename System.Diagnostics.Process
 		$oProcess.StartInfo = $oProcessStartInfo
 		
