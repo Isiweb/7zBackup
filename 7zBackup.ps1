@@ -247,6 +247,9 @@ $version = "2.0.3-Stable"  # 20160809 Anlan   Code  : Reimplemented Set-Alias fo
 #                                                     switches and parameters
 $version = "2.0.4-Stable"  # 20161111 Anlan   Code  : Minor code fixes
 #                                             Feat  : Added support for volumized archives
+$version = "2.0.5-Stable"  # 20171102 PWalker Code  : Forced clear Archive bit for Hidden files
+#                                             Feat  : Some Debug info
+$version = "2.0.6-Stable"  # 20171105 Anlan   Code  : Adjusted lowering of Archive Bits for non ASCII characters
 #
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -824,8 +827,11 @@ Function PostArchiving {
 	Trace " -------------------------------------------"
 	$MyContext.PostProcessFilesStart = Get-Date
 	Set-Variable -Name "ArchivedItemsCount" -Value ($BkCompressDetailItems.Count) -Scope Local
-	Set-Variable -Name "OperationType" -Value "Clearing" -Scope Local
-	If($BkType -eq "move") {$OperationType = "Removing"}
+	If($BkType -eq "move") {
+		Set-Variable -Name "OperationType" -Value "Removing" -Scope Local
+	} Else {
+		Set-Variable -Name "OperationType" -Value "Clearing" -Scope Local
+	}
 	
 	$archiveAttr = [System.IO.FileAttributes]::Archive
 	
@@ -840,12 +846,19 @@ Function PostArchiving {
 				If(!($?)) {Trace (" Could not remove file : {0}" -f $itemName ); $Counters.Warnings++  }
 			} Else {
 				If(($item.Attributes -band $archiveAttr)) {
-					$item = ( $item | Set-ItemProperty -Name Attributes -Value ($item.Attributes -bXor $archiveAttr) -Force -PassThru)
+					
+					# This does not work always
+					# $item = ( $item | Set-ItemProperty -Path $_.FullName -Name Attributes -Value ($_.Attributes -bXor $archiveAttr) -Force -PassThru)
+					
+					# This does
+					Set-ItemProperty -Path $item.FullName -Name Attributes -Value ((Get-ItemProperty $item).Attributes -bXOR $archiveAttr) -Force
 					If(!($?)) {
 						Trace (" Could not clear archive attribute : {0}" -f $item.FullName ); $Counters.Warnings++
 					}
 				}
 			}
+		} Else {
+			Write-Host " ? " + (Join-Path $BkRootDir $BkCompressDetailItems[$i].File)
 		}
 	}
 	
@@ -2249,6 +2262,9 @@ If($Counters.FilesSelected -gt 0) {
 	}
 }
 
+# Include non existent file
+# $SWriters.Inclusions.WriteLine("qwerty.txt")
+
 # --------------------------------------------------------------------
 # Close StreamWriters letting enough time to flush buffers
 # --------------------------------------------------------------------
@@ -2347,7 +2363,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		}
 		# Important !!!
 		$Bk7ZipArgs += "-scsUTF-8"															# Set charset for list files to UTF8
-		$Bk7ZipArgs += "-sccUTF-8"															# Set charset for console input/output to UTF8
+		$Bk7ZipArgs += "-sccDOS"															# Set charset for console input/output to DOS (OEM) Windows
 		
 		# If 7zip is beyond version 9.2 then add some more switches
 		If ([int]$MyContext.SevenZBinVersionInfo.Major -ge 15) {
@@ -2419,7 +2435,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		
 		# Adding event handers for stdout and stderr.
 		$stdOutScripBlock = { if (! [String]::IsNullOrEmpty($EventArgs.Data)) { $Event.MessageData.WriteLine($EventArgs.Data) } }
-		$stdErrScripBlock = { if (! [String]::IsNullOrEmpty($EventArgs.Data)) { $Event.MessageData.AppendLine($EventArgs.Data) } }
+		$stdErrScripBlock = { if (! [String]::IsNullOrEmpty($EventArgs.Data)) { $Event.MessageData.Append(" " + $EventArgs.Data) | Out-Null } }
 		
 		# Register Event Handlers
 		$oStdOutEvent = Register-ObjectEvent -InputObject $oProcess -Action $stdOutScripBlock -EventName 'OutputDataReceived' -MessageData $SWriters.CompressDetail
@@ -2428,11 +2444,11 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		# Start the clocks
 		$MyContext.CompressionStart = Get-Date
 		
-		
 		# Start Process
 		[void]$oProcess.Start()
-		$oProcess.BeginOutputReadLine()
-		$oProcess.BeginErrorReadLine()		
+		[void]$oProcess.BeginOutputReadLine()
+		[void]$oProcess.BeginErrorReadLine()		
+		$lastStdErrLine = 0
 		
 		# Begin polling Process
 		While (!($oProcess.HasExited)) {
@@ -2445,6 +2461,19 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 			# Get-Item -LiteralPath $BkDestFile | ForEach-Object {
 				# $Status = "Archive Size {0,0:n2} MByte. so far ..." -f ($_.Length / 1Mb)
 			# }
+			
+			# Look for any message from 7z in stdErr queue
+			$oStdErrBuilderLines = @($oStdErrBuilder.ToString().Split([System.Environment]::NewLine))
+			if($oStdErrBuilderLines.Count -gt 0) {
+				$i = 0
+				$oStdErrBuilderLines | ForEach-Object {
+					$i++
+					If($i -gt $lastStdErrLine) {
+						If($_.ToString().Length -gt 0) {Trace (" !{0}" -f $_.ToString()); $lastStdErrLine = $i}
+					}
+				}
+			}
+			
 			
 			Write-Progress -Activity "Archiving into $BkDestFile" -Status $Status -CurrentOperation "Please wait ..."
 			If(Check-CTRLCRequest -eq $True) {
@@ -2502,6 +2531,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		If(($Bk7ZipRetc -lt 2) -and ($ArchiveSize -gt 0) -and !(Check-CTRLCRequest)) {
 			
 			# Output informations in log file 
+			Trace " "
 			Trace " Created $BkArchiveName in $BkDestPath "
 			Trace (" Archive Size {0,0:n2} MB = {1,2:n2}% of original size" -f ($ArchiveSize / 1Mb), ((($ArchiveSize / $Counters.BytesSelected)) * 100))
 			Trace (" Completed in {0,0:n0} days, {1,0:n0} hours, {2,0:n0} minutes, {3,0:n3} seconds" -f $MyContext.CompressionElapsed.Days, $MyContext.CompressionElapsed.Hours, $MyContext.CompressionElapsed.Minutes, ($MyContext.CompressionElapsed.Seconds + $MyContext.CompressionElapsed.Milliseconds / 1000) )
