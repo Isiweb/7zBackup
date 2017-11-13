@@ -16,14 +16,14 @@
 #         for all archived files are lowered.
 #  diff : This option is generally used to perform the archiving of
 #         files in the selection paths that have changed after a previous
-#         backup (archive attribute set). 
-#         At successfull archiving operation all archive attributes
-#         for all archived files are lowered.
+#         full backup or any backup with option to lower Archive bit
+#         At successfull completion of archiving operation no changes
+#         are set on Archive bit
 #  incr : This option is generally used to perform the archiving of
 #         files in the selection paths that have changed after a previous
-#         full backup (archive attribute set). 
-#         At successfull archiving operation all archive attributes
-#         for all archived files are left unchanged.
+#         full backup or any backup with option to lower Archive bit
+#         At successfull completion of archiving operation all files
+#         archived have their Archive bit lowered.
 #  copy : Like FULL backup but leaves archive attribute unchanged
 #  -------------------------------------------------------------------
 #  Uncomment the following Set-Variable statement and set proper
@@ -178,8 +178,8 @@ Set-Variable -Name BkArchiveType -Value "7z" -Scope 1
 # - or do a calc, say, to use only 50% of cores -
 #
 # Set-Variable -Name "tmpNumCores" -Value([int]0) -Scope Local
-# Get-WmiObject -class win32_processor | ForEach-Object {$tmpNumCores += $_.NumberOfCores}
-# Set-Variable -Name BkArchiveThreads -Value ([int]($tmpNumCores * .8)) -Scope 1
+# Get-WmiObject -class win32_processor | ForEach-Object {If(!$_.NumberOfCores) {$tmpNumCores++} Else {$tmpNumCores += $_.NumberOfCores}}
+# Set-Variable -Name BkArchiveThreads -Value ([int]($tmpNumCores * .5)) -Scope 1
 # Remove-Variable -Name "tmpNumCores"
 
 # --------------------------------------------------------------------

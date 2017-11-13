@@ -251,6 +251,11 @@ $version = "2.0.5-Stable"  # 20171102 PWalker Code  : Forced clear Archive bit f
 #                                             Feat  : Some Debug info
 $version = "2.0.6-Stable"  # 20171105 Anlan   Code  : Adjusted lowering of Archive Bits for non ASCII characters
 #
+$version = "2.0.7-Stable"  # 20171113 Anlan   Feat  : Emission of warning on low space for destpath directory
+#                                             Code  : Adjusted emission message on presence of lock file
+#                                             Code  : Adjusted calculation of cores/threads
+#                                             Code  : Cleanup
+#
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
 # This program is free software; you can redistribute it and/or modify
@@ -295,7 +300,7 @@ $headerText = @"
 
  ------------------------------------------------------------------------------
  
-  7zBackup.ps1 ver. $version (http://7zbackup.codeplex.com)
+  7zBackup.ps1 ver. $version (https://github.com/Isiweb/7zBackup)
   
  ------------------------------------------------------------------------------
  
@@ -609,20 +614,6 @@ Function Clear-FsAttribute {
 		Write-Output $True
 	}
 	
-	# If(([System.IO.File]::Exists($fileFullName))) {
-		# Try {
-			# If((([System.IO.File]::GetAttributes($fileFullName)) -band ([System.IO.FileAttributes]::$attrName))) { 
-				# [System.IO.File]::SetAttributes($fileFullName, (([System.IO.File]::GetAttributes($fileFullName)) -bxor ([System.IO.FileAttributes]::$attrName)))
-			# }
-			# Write-Output $True
-		# } 
-		# Catch {
-			# Write-Output $False
-		# }
-	# } Else {
-		# Write-Output $False
-	# }
-
 } 
 
 # -----------------------------------------------------------------------------
@@ -680,6 +671,32 @@ Function IsValidHostName {
 	param([string]$hostName = $(throw "You must provide an host name"))
 	Write-Output ($hostName -match "^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z]|[A-Za-z][A-Za-z0-9\-]*[A-Za-z0-9])$")
 }	
+
+# -----------------------------------------------------------------------------
+# Function 		: GetDestPathFreeSpace
+# -----------------------------------------------------------------------------
+# Description	: This function is used to check how much available space is
+#                 available on destpath.
+# Parameters    : [string]DestPath - The Path To Check
+# Returns       : Long Integer
+# -----------------------------------------------------------------------------
+Function GetDestPathFreeSpace {
+	param([string]$target = $(throw "You must provide a location to check"))
+	
+	If($target -imatch "^\\\\") {
+	
+		While($true) {
+			$parent = (Split-Path -Path $target -Parent)
+			If($parent) { $target = $parent } Else { break }
+		}
+		Write-Output ([int64]((new-object -com scripting.filesystemobject).getdrive($target).availablespace))
+	
+	} Else {
+		
+		Write-Output ([int64]((new-object -com scripting.filesystemobject).getdrive($target.Substring(0,1)).availablespace))
+		
+	}
+}
 
 # -----------------------------------------------------------------------------
 # Function 		: IsValidIPAddress
@@ -1169,8 +1186,7 @@ Function Send-Notification {
 		# Do  nothing if we have no-one to notify
 		If(!($BkNotifyLog)) { return; }
 		
-		Write-Host " "
-		Write-Host " Sending notification email ..."
+		Write-Host "`n Sending notification email ..."
 
 		$SmtpClient  = [Object]
 		$MailMessage = [Object]
@@ -1227,14 +1243,12 @@ Function Send-Notification {
 			}
 			
 			[void] $SmtpClient.Send($MailMessage) 
-			Write-Host " Done" -ForeGroundColor Green
-			Write-Host " "
+			Write-Host " Done`n " -ForeGroundColor Green
 			
 			} 
 			
 		Catch {
-			Write-Host (" Unable to send notification email : {0} " -f $_.Exception.Categoryinfo.Reason ) -ForeGroundColor Red
-			Write-Host " "
+			Write-Host (" Unable to send notification email : {0} `n " -f $_.Exception.Categoryinfo.Reason ) -ForeGroundColor Red
 			}
 			
 		Finally {
@@ -1275,8 +1289,7 @@ Function Test-Lock {
 					   
 				ElseIf ($OldProcess.Responding) {
 					
-					Write-Output ("A previous operation is running with process id {0}" -f $OldPid)
-					Write-Output ("Quitting ...")
+					Write-Output ("A previous operation is running with process id {0}`n Quitting ...`n " -f $OldPid)
 					Return
 				}
 				
@@ -1285,15 +1298,13 @@ Function Test-Lock {
 					# Try Stopping the non-responding process
 					Stop-Process -Id $OldPid -Force | Out-Null
 					If(!($?)) {
-						Write-Output ("A previous operation is not responding with process id {0}" -f $OldPid)
-						Write-Output ("Quitting ...")
+						Write-Output ("A previous operation is not responding with process id {0}`n Quitting ...`n " -f $OldPid)
 						Return
 					}
 					If(Test-Variable "OldRoot") { If(Test-Path -LiteralPath $OldRoot -PathType Container ) { Remove-RootDir $OldRoot | Out-Null } }
 					Remove-Item -LiteralPath $BkLockFile | Out-Null
 					If(!($?)) {
-						Write-Output ("Could not remove a previous lock file")
-						Write-Output ("Quitting ...")
+						Write-Output ("Could not remove a previous lock file`n Quitting ...`n ")
 						Return
 					}
 					
@@ -1331,9 +1342,7 @@ Function Test-Lock {
 	New-Item -Path $BkLockFile -ItemType File -Force | Out-Null
 	If ($?) {("PID={0}`nRoot={1}" -f [System.Diagnostics.Process]::GetCurrentProcess().Id, $BkRootDir) | Out-File $BkLockFile -encoding ASCII -append }
 	If(!($?)) {
-		Write-Output ("Could not write lock file")
-		Write-Output ("Quitting ...")
-		Write-Output (" ")
+		Write-Output ("Could not write lock file`n Quitting ...`n ")
 		Return
 	}
 
@@ -1976,7 +1985,8 @@ $Counters.Criticals = 0
 $Counters.FoldersDone = 0
 $Counters.FilesProcessed = 0
 $Counters.FilesSelected = 0
-$Counters.BytesSelected = 0
+$Counters.BytesSelected = [int64]0
+$Counters.BytesAvailable = [int64]0
 $Counters.PlaceHolders = @()
 
 # --------------------------------------------------------------------
@@ -1992,8 +2002,8 @@ $SWriters.Log = New-Object -TypeName System.IO.StreamWriter($BkLogFile, [String]
 $SWriters.Log.WriteLine($headerText)
 
 
-Test-Lock | ForEach-Object { $hasErrors = $True; Write-Host " Err : $_" }
-New-RootDir | ForEach-Object { $hasErrors = $True; Write-Host " Err : $_" }
+Test-Lock | ForEach-Object { $hasErrors = $True; Trace " Err : $_" }
+New-RootDir | ForEach-Object { $hasErrors = $True; Trace " Err : $_" }
 Check-CTRLCRequest | Out-Null
 
 If($hasErrors) { 
@@ -2252,7 +2262,8 @@ If($Counters.FilesSelected -gt 0) {
 	Get-ChildItem -Path $BkRootDir -Force | ? {!$_.PSIsContainer} | ForEach-Object {
 		if(	
 			($_.Name -notmatch "stats") -And
-			($_.Name -notmatch "README")
+			($_.Name -notmatch "README") -And
+			($_.Name -notmatch "^Compress-Details.txt")
 		) {
 			$Counters.FilesSelected++ ; 
 			$Counters.BytesSelected += $_.Length ;
@@ -2343,11 +2354,22 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		Trace (" {0,-31} {1,11:n0}  {2}" -f "Performance average", ($Counters.FilesProcessed / $MyContext.SelectionElapsed.TotalMinutes ), "files per minute")
 		Trace "                                  =========== ================= "
 		Trace " "
+		
+
 	}
 	
 	
-	
 	If($BkDryRun -ne $True) {
+
+		# Check we have enough disk space available on target path
+		$Counters.BytesAvailable = ([int64](GetDestPathFreeSpace -target $BkDestPath))
+		If($Counters.BytesAvailable -lt ($totalBytes * 1)) {
+			Trace (" Warning !! ... you're low on space on target ")
+			Trace (" {0,-31} {1,17:n2}" -f " Required Max..............", ($totalBytes/1MB))
+			Trace (" {0,-31} {1,17:n2}" -f " Available  ...............", ($Counters.BytesAvailable/1MB))
+			Trace (" If 7zip cannot compress enough it will fail `n")
+		}
+
 	
 		$BkDestFile = (Join-Path -Path $BkDestPath -ChildPath $BkArchiveName)
 		Write-Progress -Activity "Archiving into $BkDestFile" -Status "Please wait ..." -CurrentOperation "Initializing ..."	
@@ -2457,10 +2479,6 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 			$ArchiveSize = 0
 			Get-ChildItem -Path $BkDestPath -Filter ("{0}*" -f $BkArchiveName) | ?{ !$_.PSIscontainer } | ForEach-Object { $ArchiveSize += $_.Length }
 			If ( $ArchiveSize -gt 0 ) { $Status = "Archive Size {0,0:n2} MByte. so far ..." -f ($ArchiveSize / 1Mb) }
-			
-			# Get-Item -LiteralPath $BkDestFile | ForEach-Object {
-				# $Status = "Archive Size {0,0:n2} MByte. so far ..." -f ($_.Length / 1Mb)
-			# }
 			
 			# Look for any message from 7z in stdErr queue
 			$oStdErrBuilderLines = @($oStdErrBuilder.ToString().Split([System.Environment]::NewLine))
@@ -2599,32 +2617,32 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 			# 8   - Not Enough memory to complete operation
 			# 255 - User stopped the process
 			If (($Bk7ZipRetc -eq 255)) {
-				$gP.CriticalCount += 1
+				$Counters.Criticals += 1
 				Trace " " 
 				Trace " Cancelled ! User has stopped 7-Zip archiving process" 
 				Trace " NO ARCHIVE HAS BEEN CREATED" 
 				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -LiteralPath $BkDestFile -Force | Out-Null }
 			} ElseIf (($Bk7ZipRetc -eq 2)) {
-				$gP.CriticalCount += 1
+				$Counters.Criticals += 1
 				Trace " " 
 				Trace " Cancelled ! 7-Zip reported a fatal error." 
 				Trace " NO VALID ARCHIVE HAS BEEN CREATED"
 				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -LiteralPath $BkDestFile -Force | Out-Null }
 			} ElseIf (($Bk7ZipRetc -eq 7)) {
-				$gP.CriticalCount += 1
+				$Counters.Criticals += 1
 				Trace " " 
 				Trace " Cancelled ! 7-Zip has been invoked with a wrong command line." 
 				Trace " $cmdLine" 
 				Trace " NO VALID ARCHIVE HAS BEEN CREATED" 
 				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -LiteralPath $BkDestFile -Force | Out-Null }
 			} ElseIf (($Bk7ZipRetc -eq 8)) {
-				$gP.CriticalCount += 1
+				$Counters.Criticals += 1
 				Trace " "
 				Trace " Cancelled ! 7-Zip reports not enough memory." 
 				Trace " NO VALID ARCHIVE HAS BEEN CREATED" 
 				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -LiteralPath $BkDestFile -Force | Out-Null }
 			} ElseIf (!(Test-Path -Path "$BkDestPath\$BkArchiveName" -PathType Leaf)) {
-				$gP.CriticalCount += 1
+				$Counters.Criticals += 1
 				Trace " " 
 				Trace " Error !" 
 				Trace " NO ARCHIVE HAS BEEN CREATED" 
