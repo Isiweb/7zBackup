@@ -256,6 +256,9 @@ $version = "2.0.7-Stable"  # 20171113 Anlan   Feat  : Emission of warning on low
 #                                             Code  : Adjusted calculation of cores/threads
 #                                             Code  : Cleanup
 #
+$version = "2.0.8-Stable"  # 20171121 Anlan   Feat  : Logger has been embedded as internal string builder
+#                                                     This helps notifying for parameters errors
+#
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
 # This program is free software; you can redistribute it and/or modify
@@ -295,6 +298,7 @@ $MyContext.WinVer     = (Get-WmiObject Win32_OperatingSystem).Version.Split(".")
 $MyContext.PSVer      = [int]$PSVersionTable.PSVersion.Major
 $MyContext.Cancelling = $False
 $MyContext.DummyFile  = ".7zb"
+$MyContext.Logger     = New-Object -TypeName System.Text.StringBuilder
 
 $headerText = @"
 
@@ -316,7 +320,7 @@ $helpText = @"
                        [--dry]						
                        [--workdrive < working drive letter >]
                        [--rotate < number >]
-                       [--logfile < filename >]
+                       [--logfile < filename >] IGNORED since 2.0.8
                        [--pre < filename | `{scriptblock`} >]
 					   [--post < filename | `{scriptblock`} >]
 					   
@@ -637,7 +641,6 @@ Function Clear-Script {
 
 	
     If ((Test-Variable "cmdLineBatch")) {if ((Test-Path ($cmdLineBatch))) { Remove-Item -LiteralPath $cmdLineBatch | Out-Null }}
-	If ((Test-Variable "BkLogFile")) {if ((Test-Path ($BkLogFile))) { Remove-Item -LiteralPath $BkLogFile | Out-Null }}
 	If ((Test-Variable "BkLockFile")) {if ((Test-Path ($BkLockFile))) { Remove-Item -LiteralPath $BkLockFile | Out-Null }}
 	Set-Location ($MyContext.StartDir)
 	If ((Test-Path -Path ($BkRootDir) -PathType Container)) { Remove-RootDir $BkRootDir | Out-Null }
@@ -840,15 +843,16 @@ Function PostArchiving {
 	) { Return }
 	
 	# Remove  or clear files successfully archived if necessary
-	Trace " Post Processing Successfully Archived Files"
-	Trace " -------------------------------------------"
 	$MyContext.PostProcessFilesStart = Get-Date
 	Set-Variable -Name "ArchivedItemsCount" -Value ($BkCompressDetailItems.Count) -Scope Local
 	If($BkType -eq "move") {
 		Set-Variable -Name "OperationType" -Value "Removing" -Scope Local
+		Trace " Deleting Successfully Archived Files"
 	} Else {
 		Set-Variable -Name "OperationType" -Value "Clearing" -Scope Local
+		Trace " Clearing Archive bit for Archived Files"
 	}
+	Trace " -------------------------------------------"
 	
 	$archiveAttr = [System.IO.FileAttributes]::Archive
 	
@@ -860,7 +864,7 @@ Function PostArchiving {
 		if($? -and $item) {
 			If($BkType -eq "move") {
 				$item | ? { !$_.PSIsContainer } | Remove-Item -Force | Out-Null
-				If(!($?)) {Trace (" Could not remove file : {0}" -f $itemName ); $Counters.Warnings++  }
+				If(!($?)) {Trace (" FAILED : {0}" -f $BkCompressDetailItems[$i].File ); $Counters.Warnings++  }
 			} Else {
 				If(($item.Attributes -band $archiveAttr)) {
 					
@@ -870,7 +874,7 @@ Function PostArchiving {
 					# This does
 					Set-ItemProperty -Path $item.FullName -Name Attributes -Value ((Get-ItemProperty $item).Attributes -bXOR $archiveAttr) -Force
 					If(!($?)) {
-						Trace (" Could not clear archive attribute : {0}" -f $item.FullName ); $Counters.Warnings++
+						Trace (" FAILED : {0}" -f $BkCompressDetailItems[$i].File ); $Counters.Warnings++
 					}
 				}
 			}
@@ -1174,7 +1178,8 @@ Function Remove-SymLink  {
 Function Send-Notification {
 
 		[console]::TreatControlCAsInput = $True
-		#Ensure file stream writers are closed
+		
+		# Ensure file stream writers are closed
 		$SWriters.GetEnumerator() | ForEach-Object {
 			Try {
 			$_.Value.Flush()
@@ -1183,8 +1188,12 @@ Function Send-Notification {
 			} Catch {}
 		}
 
-		# Do  nothing if we have no-one to notify
+		# Do nothing if we have no-one to notify
+		# Or we do not have enough info to issue the email
 		If(!($BkNotifyLog)) { return; }
+		If(!($BkSmtpFrom))  { return; }
+		If(!($BkSmtpRelay)) { return; }
+		If(!($BkSmtpPort))  { return; }
 		
 		Write-Host "`n Sending notification email ..."
 
@@ -1218,7 +1227,7 @@ Function Send-Notification {
 			}
 
 			$MailMessage.Subject = $BkMailSubject
-			$MailMessage.Body = ((Get-Content -path $BkLogFile -encoding ASCII) -join "`n")
+			$MailMessage.Body = ($MyContext.Logger.ToString())
 			
 			# Do we have to include extra informations ?
 			If ($BkNotifyExtra -ne "none") {
@@ -1407,7 +1416,7 @@ Function Test-Variable {
 # -----------------------------------------------------------------------------
 Function Trace ($message) {
 	Write-Host ($message) 
-	$SWriters.Log.WriteLine($message)
+	[void]$MyContext.Logger.AppendLine($message)
 }
 
 # -----------------------------------------------------------------------------
@@ -1459,7 +1468,7 @@ Function Validate-Arguments {
 				"--maxfilesize"     { Set-Variable -name BkMaxFileSize -value $BkArguments[++$i] -scope Script }		
 				"--minfilesize"     { Set-Variable -name BkMinFileSize -value $BkArguments[++$i] -scope Script }				
 				"--clearbit"        { Set-Variable -name BkClearBit -value $BkArguments[++$i] -scope Script }
-				"--logfile"         { Set-Variable -name BkLogFile -value $BkArguments[++$i] -scope Script }
+				"--logfile"         { Set-Variable -name BkLogFile -value $BkArguments[++$i] -scope Script ; Remove-Variable -name BkLogFile -scope Script }
 				"--notify"          { Set-Variable -name BkNotifyLog -value $BkArguments[++$i] -scope Script }
 				"--notifyto"        { Set-Variable -name BkNotifyLog -value $BkArguments[++$i] -scope Script }
 				"--notifyfrom"      { Set-Variable -name BkSmtpFrom -value $BkArguments[++$i] -scope Script }
@@ -1676,7 +1685,10 @@ Function Validate-Variables {
 		!(Test-Path $BkDestPath -pathType Container) -Or
 		!(Check-FsAttribute $BkDestPath "Directory") -Or
 		!(Test-Path-Writable $BkDestPath "File")
-	) { Write-Output "Missing or invalid --destpath argument. Must be a writable container" }
+	) { 
+		Write-Output ("Missing or invalid --destpath {0}." -f $BkDestPath) 
+		Write-Output ("Ensure above path is reachable and writable")
+	}
 	
 	# --------------------------------------------------------------------------------------------------------------------------
 	# Archive Prefix - Checks
@@ -1800,43 +1812,37 @@ Function Validate-Variables {
 	}
 
 	# --------------------------------------------------------------------------------------------------------------------------
-	# Backup Log File - Checks
-	# --------------------------------------------------------------------------------------------------------------------------
-	If(!(Test-Variable "BkLogFile")) { Set-Variable -name BkLogFile -value (Join-Path $Env:Temp ($MyContext.Name.Substring(0, ($MyContext.Name.LastIndexOf("."))) + (Get-Date -format "yyyyMMdd-HHmmss") + ".log")) -scope Script } 
-	If(
-		($BkLogFile -match "^\s*$") -Or
-		(Check-FsAttribute $BkLogFile "Directory") -Or
-		!(Test-Path -LiteralPath $BkLogFile -IsValid)
-	) { Write-Output "Missing or invalid --logfile argument. Must be a valid file" }
-	If(Test-Path -LiteralPath $BkLogFile -pathType Leaf) {
-		Remove-Item -Path $BkLogFile -Force | Out-Null
-		If(!($?)) {Write-Output "Could not overwrite previous log file"}
-	} 
-	If(!(Test-Path -LiteralPath $BkLogFile -pathType Leaf)) {
-		New-Item -Path $BkLogFile -ItemType File | Out-Null
-		If(!($?)) {Write-Output "Could not initialize log file"}
-	}
-
-	# --------------------------------------------------------------------------------------------------------------------------
-	# Emeil Notification - Checks
+	# Email Notification - Checks
 	# --------------------------------------------------------------------------------------------------------------------------
 	If(Test-Variable "BkNotifyLog") {
 
 		# ----------------------------------------------------------------------------------------------------------------------
+		# To Email Address(es) - Checks
+		# ----------------------------------------------------------------------------------------------------------------------
+		If(!($BkNotifyLog -is [array])) { 
+			Set-Variable -Name NotifyRecipients -value @($BkNotifyLog) -scope Script
+			$NotifyRecipients | Where-Object {!(IsValidEmailAddress $_)} | Write-Output ("Invalid --notify address {0}" -f $_)
+			$BkNotifyLog = @($NotifyRecipients | Where-Object {IsValidEmailAddress $_}) 
+			Remove-Variable -Name NotifyRecipients -Scope Script
+		} Else {
+			$BkNotifyLog | Where-Object {!(IsValidEmailAddress $_)} | Write-Output ("Invalid --notify address {0}" -f $_)
+			$BkNotifyLog = @($BkNotifyLog | Where-Object {IsValidEmailAddress $_}) 
+		}
+		If($BkNotifyLog.Count -lt 1) {
+			Remove-Variable -Name BkNotifyLog -Scope Script
+		}
+
+		# ----------------------------------------------------------------------------------------------------------------------
 		# From Email Addresses - Checks
-		# ----------------------------------------------------------------------------------------------------------------------
-		If(!($BkNotifyLog -is [array])) { $BkNotifyLog = @($BkNotifyLog) }
-		$BkNotifyLog | ForEach-Object { If(!(IsValidEmailAddress $_)) { Write-Output ("Missing or invalid --notify argument {0} " -f $_) } }
-
-
-		# ----------------------------------------------------------------------------------------------------------------------
-		# To Email Addresses - Checks
 		# ----------------------------------------------------------------------------------------------------------------------
 		If(!(Test-Variable "BkSmtpFrom"))  { 
 			Write-Output "Missing or invalid --notifyfrom argument" 
 		} Else {
 			If($BkSmtpFrom -is [array]) { $BkSmtpFrom = ($BkSmtpFrom -join "") }
-			If(!(IsValidEmailAddress $BkSmtpFrom)) { Write-Output ("Missing or invalid --notifyfrom argument. {0} is not a valid email address" -f $BkSmtpFrom) }
+			If(!(IsValidEmailAddress $BkSmtpFrom)) { 
+				Write-Output ("Missing or invalid --notifyfrom argument. {0} is not a valid email address" -f $BkSmtpFrom) 
+				Remove-Variable -Name BkSmtpFrom -Scope Script
+			}
 		}
 
 		# ----------------------------------------------------------------------------------------------------------------------
@@ -1847,7 +1853,7 @@ Function Validate-Variables {
 			"none"   { Set-Variable -name BkNotifyExtra -value "none"  -scope Script }
 			"inline" { Set-Variable -name BkNotifyExtra -value "inline" -scope Script }
 			"attach" { Set-Variable -name BkNotifyExtra -value "attach" -scope Script }
-			Default  { Write-Output "Missing or invalid --notifyextra argument" }
+			Default  { Write-Output "Missing or invalid --notifyextra argument" ; Set-Variable -name BkNotifyExtra -value "none" -scope Script}
 		}
 
 		# ----------------------------------------------------------------------------------------------------------------------
@@ -1857,7 +1863,10 @@ Function Validate-Variables {
 		If(
 			!(Test-Variable "BkSmtpRelay") -Or
 			(!(IsValidHostName $BkSmtpRelay) -And !(IsValidIPAddress $BkSmtpRelay))
-		) { Write-Output "Missing or invalid --smtpserver argument" }
+		) { 
+			Write-Output "Missing or invalid --smtpserver argument" 
+			Remove-Variable -Name BkSmtpRelay -Scope Script
+		}
 
 		# ----------------------------------------------------------------------------------------------------------------------
 		# Relay server authentication - Checks
@@ -1868,7 +1877,11 @@ Function Validate-Variables {
 				!(Test-Variable "BkSmtpPass") -Or
 				($BkSmtpUser -match "^\s*$") -Or
 				($BkSmtpPass -match "^\s*$")
-			) { Write-Output "Missing or invalid --smtpuser or --smtppass argument" }
+			) { 
+				Write-Output "Missing or invalid --smtpuser or --smtppass argument" 
+				Remove-Variable -Name BkSmtpUser
+				Remove-Variable -Name BkSmtpPass
+			}
 		}
 
 		# ----------------------------------------------------------------------------------------------------------------------
@@ -1949,29 +1962,6 @@ Function Validate-Variables {
 # Clean all script scoped variables beginning with "Bk"
 Get-ChildItem variable:script:Bk* | Remove-Variable | Out-Null
 
-# Output Header Text
-Write-Host $headerText
-
-# Check For the presence of "--help" argument switch
-If($args.length -ne 0) { 
-	switch -wildcard ($args) { "*--help*" {Write-Host $helpText ; [console]::TreatControlCAsInput = $False; Return} }
-} 
-
-# Import hard coded variables if present -vars.ps1 script
-Set-Variable -name BkVarsImportScript -value (Join-Path $MyContext.Directory $MyContext.Name.Replace(".ps1", "-vars.ps1")) -scope Script
-If((Test-Path $BkVarsImportScript -pathType Leaf )) {
-	Try { & $BkVarsImportScript }
-	Catch { }
-}
-
-Set-Variable -Name hasErrors -Value $False -Scope Script
-Set-Variable -Name BkArguments -Value $args -Scope Script
-Set-Variable -Name Actions -Value @("Validate-Arguments", "Validate-Variables") -Scope Script
-
-Validate-Arguments | ForEach-Object { $hasErrors = $True; Write-Host " Err : $_" }
-Validate-Variables | ForEach-Object { $hasErrors = $True; Write-Host " Err : $_" }
-If($hasErrors) { Write-Host ("`n Try .\{0} --help `n" -f $MyInvocation.MyCommand.Name); Return }
-
 # --------------------------------------------------------------------
 # Initialize script scoped hashes 
 # --------------------------------------------------------------------
@@ -1989,6 +1979,31 @@ $Counters.BytesSelected = [int64]0
 $Counters.BytesAvailable = [int64]0
 $Counters.PlaceHolders = @()
 
+# Output Header Text
+Trace $headerText
+
+# Check For the presence of "--help" argument switch
+If($args.length -ne 0) { 
+	switch -wildcard ($args) { "*--help*" {Trace $helpText ; [console]::TreatControlCAsInput = $False; Return} }
+} 
+
+# Import hard coded variables if present -vars.ps1 script
+Set-Variable -name BkVarsImportScript -value (Join-Path $MyContext.Directory $MyContext.Name.Replace(".ps1", "-vars.ps1")) -scope Script
+If((Test-Path $BkVarsImportScript -pathType Leaf )) {
+	Try { & $BkVarsImportScript }
+	Catch {
+		Trace ("{0} reports an error thus has not been parsed" -f $BkVarsImportScript)
+	}
+}
+
+Set-Variable -Name hasErrors -Value $False -Scope Script
+Set-Variable -Name BkArguments -Value $args -Scope Script
+
+Validate-Arguments | ForEach-Object { $hasErrors = $True; Trace " Err : $_" }
+Validate-Variables | ForEach-Object { $hasErrors = $True; Trace " Err : $_" }
+If($hasErrors) { Trace ("`n Try .\{0} --help `n" -f $MyInvocation.MyCommand.Name); $Counters.Criticals = 1; Send-Notification; Return }
+
+
 # --------------------------------------------------------------------
 # Do compose names
 # --------------------------------------------------------------------
@@ -1996,11 +2011,6 @@ Set-Variable -Name BkArchiveName -Value ($BkArchivePrefix + "-" + $BkType + "-" 
 Set-Variable -Name BkRootDir     -Value ($BkWorkDrive + ":\~" + ([System.Guid]::NewGuid().ToString().Split("-")[1])) -Scope Script
 Set-Variable -Name BkLockFile    -Value (Join-Path $Env:Temp ($MyContext.Name.Substring(0, ($MyContext.Name.LastIndexOf("."))) + ".lock")) -scope Script
 Set-Variable -Name BkSources     -Value @{} -Scope Script
-
-# Initialize log file
-$SWriters.Log = New-Object -TypeName System.IO.StreamWriter($BkLogFile, [String]$True, [System.Text.Encoding]::ASCII)
-$SWriters.Log.WriteLine($headerText)
-
 
 Test-Lock | ForEach-Object { $hasErrors = $True; Trace " Err : $_" }
 New-RootDir | ForEach-Object { $hasErrors = $True; Trace " Err : $_" }
