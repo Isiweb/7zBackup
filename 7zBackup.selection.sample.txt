@@ -165,6 +165,21 @@
 matchexcludefiles=thumbs\.db$|.*\.mp3$|.*\~$|.*\.tmp$
 
 # ********************************************************************
+#  TAG: matchcleanupdirs (optional)
+#  
+#       Holds the regular expression to test directory names against.
+#       Every directory name (regardless their path) which match this
+#       regular expression will be deleted during the 
+#       scanning/selection process.
+#
+#       USE WITH GREAT CARE OR YOU WILL LIKELY HAVE ALL OF YOUR
+#       IMPORTANT DATA SIMPLY NUCLEARIZED FROM YOUR SOURCES
+#       DIRECTORIES MARKED AS JUNCTION POINTS WILL BE SIMPLY SKIPPED
+#
+#       Example 
+#       matchcleanupdirs=.*\\veryunusefuldirectory$
+
+# ********************************************************************
 #  TAG: matchcleanupfiles (optional)
 #  
 #       Holds the regular expression to test file names against.
@@ -177,7 +192,6 @@ matchexcludefiles=thumbs\.db$|.*\.mp3$|.*\~$|.*\.tmp$
 #
 #       Example 
 #       matchcleanupfiles=.*\.tmp$              (to delete *.tmp)
-
 
 # ********************************************************************
 #  TAG: maxfileage (optional)
@@ -227,7 +241,8 @@ matchexcludefiles=thumbs\.db$|.*\.mp3$|.*\~$|.*\.tmp$
 #       of size 0
 #
 #       Example : to select files which are of size 1MB or lower
-#       maxfilesize=1024
+#                 as 1MB = 1024Kb = 1024^2 Bytes
+#       maxfilesize=1048576
 #
 #       Default
 #       maxfilesize=
@@ -242,7 +257,8 @@ matchexcludefiles=thumbs\.db$|.*\.mp3$|.*\~$|.*\.tmp$
 #       of size 0
 #
 #       Example : to select files which are of size at least 1MB or higher
-#       minfilesize=1024
+#                 as 1MB = 1024Kb = 1024^2 Bytes
+#       minfilesize=1048576
 #
 #       Default
 #       minfilesize=

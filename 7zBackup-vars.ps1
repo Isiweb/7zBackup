@@ -178,7 +178,17 @@ Set-Variable -Name BkArchiveType -Value "7z" -Scope 1
 # - or do a calc, say, to use only 50% of cores -
 #
 # Set-Variable -Name "tmpNumCores" -Value([int]0) -Scope Local
-# Get-WmiObject -class win32_processor | ForEach-Object {If(!$_.NumberOfCores) {$tmpNumCores++} Else {$tmpNumCores += $_.NumberOfCores}}
+# Get-WmiObject -class win32_processor | ForEach-Object {
+	# If($_.NumberOfLogicalProcessors) {
+		# $tmpNumCores += [int]$_.NumberOfLogicalProcessors
+	# } 
+	# ElseIf($_.NumberOfCores) {
+		# $tmpNumCores += [int]$_.NumberOfCores
+	# }
+	# Else {
+		# $tmpNumCores ++
+	# }
+# }
 # Set-Variable -Name BkArchiveThreads -Value ([int]($tmpNumCores * .5)) -Scope 1
 # Remove-Variable -Name "tmpNumCores"
 

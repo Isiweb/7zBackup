@@ -258,6 +258,10 @@ $version = "2.0.7-Stable"  # 20171113 Anlan   Feat  : Emission of warning on low
 #
 $version = "2.0.8-Stable"  # 20171121 Anlan   Feat  : Logger has been embedded as internal string builder
 #                                                     This helps notifying for parameters errors
+$version = "2.1.0-Stable"  # 20171127 Anlan   Code  : Adjusted calc of threads over cores
+#                                     Anlan   Feat  : Added matchcleanupdirs directive in selection to remove unwanted
+#                                                     or temporary directories during scan USE WITH GREAT CARE !!!!
+#                                             Code  : Amended some typos about Bytes and Mbytes
 #
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -867,12 +871,9 @@ Function PostArchiving {
 				If(!($?)) {Trace (" FAILED : {0}" -f $BkCompressDetailItems[$i].File ); $Counters.Warnings++  }
 			} Else {
 				If(($item.Attributes -band $archiveAttr)) {
-					
-					# This does not work always
-					# $item = ( $item | Set-ItemProperty -Path $_.FullName -Name Attributes -Value ($_.Attributes -bXor $archiveAttr) -Force -PassThru)
-					
-					# This does
-					Set-ItemProperty -Path $item.FullName -Name Attributes -Value ((Get-ItemProperty $item).Attributes -bXOR $archiveAttr) -Force
+
+					$item = ( $item | Set-ItemProperty -Name Attributes -Value ($_.Attributes -bXor $archiveAttr) -Force -PassThru )
+					# Set-ItemProperty -Path $item.FullName -Name Attributes -Value ((Get-ItemProperty $item).Attributes -bXOR $archiveAttr) -Force
 					If(!($?)) {
 						Trace (" FAILED : {0}" -f $BkCompressDetailItems[$i].File ); $Counters.Warnings++
 					}
@@ -915,6 +916,24 @@ Function ProcessFolder ($thisFolder) {
 	# Verify wether or not we have to scan this folder for files or stop recursion due to regexp or maxdepth reached
 	$scanThisPathForFiles = $True
 	$scanThisPathForRecursion = $True
+	If(($matchcleanupdirs) -and ($thisFolder.RelativeName -imatch $matchcleanupdirs)) {
+		$scanThisPathForFiles = $False 
+		$scanThisPathForRecursion = $False
+		$folderToBeNuked = (Get-Item -LiteralPath $thisFolder.RelativeName -Force | Where-Object { $_.PSISContainer -eq $true -and -not ($_.Attributes -band 1024) })
+		If($folderToBeNuked) {
+			If(!$BkDryRun) {
+				Trace (" Removing D {0} " -f $thisFolder.RealName)
+				$folderToBeNuked | Remove-Item -Force -Recurse -ErrorVariable childDirRemoveError | Out-Null
+				If(-Not $?) {
+					$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childDirRemoveError.CategoryInfo.Reason, $childDirRemoveError.CategoryInfo.TargetName))	
+				    Trace (" Exception id {0} on {1} " -f $Counters.Exceptions, $thisFolder.RealName)
+				}
+			} Else {
+				Trace (" Would remove {0} " -f $thisFolder.RealName)
+			}
+		}
+		Return
+	}
 	If(($matchexcludepath) -and ($thisFolder.RelativeName -imatch $matchexcludepath)) {
 		$scanThisPathForFiles = $False 
 		$SWriters.Exclusions.WriteLine([string]("{0}`t{1}`t{2}`t{3}" -f $Counters.Exclusions++, "matchexcludepath", "D", $thisFolder.RealName))
@@ -944,6 +963,7 @@ Function ProcessFolder ($thisFolder) {
 			$realTargetName = $realTargetName.Replace($realTargetName.Split("\")[0],"")
 			$realTargetName = [string](Join-Path -Path $BkSources[$thisFolder.ContainerAlias] -ChildPath $realTargetName)
 			$SWriters.Exceptions.WriteLine(("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childItemsScanErrors[$i].CategoryInfo.Reason, $realTargetName))
+			Trace (" Exception id {0} on {1} " -f $Counters.Exceptions, $realTargetName)
 		}
 	}
 
@@ -984,13 +1004,15 @@ Function ProcessFolder ($thisFolder) {
 				# >>> Clean up files ?
 				If(($matchcleanupfiles) -and ($childFileName -match $matchcleanupfiles)) {
 					If(!$BkDryRun) {
-						Remove-Item -Path $childFile -Force -ErrorVariable childFileRemoveError | Out-Null
+						Trace (" Removing F {0} " -f $childFileRealName)
+						$childFile | Remove-Item -Force -ErrorVariable childFileRemoveError | Out-Null
 						if (!$?) {
 							$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childFileRemoveError.CategoryInfo.Reason, $childFileRemoveError.CategoryInfo.TargetName))
+							Trace (" Exception id {0} on {1} " -f $Counters.Exceptions, $childFileRealName)
 							continue
 						}
 					} Else {
-						Write-Host (" Would remove {0} " -f $childFileRealName)
+						Trace (" Would remove {0} " -f $childFileRealName)
 					}
 				}
 				# <<<
@@ -1758,12 +1780,17 @@ Function Validate-Variables {
 		} Else {
 			Set-Variable -Name "BkArchiveThreads" -Value ([int]$BkArchiveThreads) -Scope Script
 			Set-Variable -Name "tmpNumCores" -Value([int]0) -Scope Local
-			# Check number of threads does not exceed number of available cores
+			
+			# Check number of threads does not exceed number of available (logical) cores
 			Get-WmiObject -class win32_processor | ForEach-Object {
-				If(!$_.NumberOfCores) {
-					$tmpNumCores++ 
-				} Else {
-					$tmpNumCores += $_.NumberOfCores
+				If($_.NumberOfLogicalProcessors) {
+					$tmpNumCores += [int]$_.NumberOfLogicalProcessors
+				} 
+				ElseIf($_.NumberOfCores) {
+					$tmpNumCores += [int]$_.NumberOfCores
+				}
+				Else {
+					$tmpNumCores ++
 				}
 			}
 			If($BkArchiveThreads -gt $tmpNumCores) {
@@ -1959,8 +1986,9 @@ Function Validate-Variables {
 # This will prevent unhandled exit from the script
 [console]::TreatControlCAsInput = $False
 
-# Clean all script scoped variables beginning with "Bk"
+# Clean all script scoped variables beginning with "Bk" and "match"
 Get-ChildItem variable:script:Bk* | Remove-Variable | Out-Null
+Get-ChildItem variable:script:match* | Remove-Variable | Out-Null
 
 # --------------------------------------------------------------------
 # Initialize script scoped hashes 
@@ -2119,33 +2147,53 @@ If(( $BkSources.Count -eq 0 )) {
 }
 
 # --------------------------------------------------------------------
-# Check we have an cleanup criteria on file names
+# Check we have an cleanup criteria on directories
 # --------------------------------------------------------------------
-Trace " Cleanup Files Criteria (will be deleted during scan)"
-Trace " ------------------------------------------------------------------------------"
-$BkSelectionContents | Where-Object {$_ -match "^matchcleanupfiles="} | ForEach-Object {
-	$line = $_.Substring($_.IndexOf("=") + 1)
-	If(($line)) {
-		Trace " + match $line"
-		If(!($matchcleanupfiles)) { $matchcleanupfiles = $line } Else { $matchcleanupfiles += ("|" + $line) }
+If($BkSelectionContents | Where-Object {$_ -match "^matchcleanupdirs="}) {
+
+	Trace " Remove Directories Criteria"
+	Trace " ------------------------------------------------------------------------------"
+	$BkSelectionContents | Where-Object {$_ -match "^matchcleanupdirs="} | ForEach-Object {
+		$line = $_.Substring($_.IndexOf("=") + 1).Trim()
+		If(($line)) {
+			Trace " + Regex : $line"
+			If(!($matchcleanupdirs)) { $matchcleanupdirs = $line } Else { $matchcleanupdirs += ("|" + $line) }
+		}
 	}
+	Trace "`n All directories matching the above listed regular expressions will be deleted !!!`n"
 }
 
+
+# --------------------------------------------------------------------
+# Check we have an cleanup criteria on file names
+# --------------------------------------------------------------------
+If($BkSelectionContents | Where-Object {$_ -match "^matchcleanupfiles="}) {
+
+	Trace " Remove Files Criteria"
+	Trace " ------------------------------------------------------------------------------"
+	$BkSelectionContents | Where-Object {$_ -match "^matchcleanupfiles="} | ForEach-Object {
+		$line = $_.Substring($_.IndexOf("=") + 1).Trim()
+		If(($line)) {
+			Trace " + Regex : $line"
+			If(!($matchcleanupfiles)) { $matchcleanupfiles = $line } Else { $matchcleanupfiles += ("|" + $line) }
+		}
+	}
+	Trace "`n All files matching the above listed regular expressions will be deleted !!!"
+}
 
 # --------------------------------------------------------------------
 # Check we have an exclude criteria on file names
 # --------------------------------------------------------------------
-Trace " "
-Trace " Include Files Criteria "
+Trace "`n Files Inclusion Criteria "
 Trace " ------------------------------------------------------------------------------"
 $BkSelectionContents | Where-Object {$_ -match "^matchincludefiles="} | ForEach-Object {
 	$line = $_.Substring($_.IndexOf("=") + 1)
 	If(($line)) {
-		Trace " + match $line"
+		Trace " + Regex : $line"
 		If(!($matchincludefiles)) { $matchincludefiles = $line } Else { $matchincludefiles += ("|" + $line) }
 	}
 }
-If(!($matchincludefiles)) { Trace " + All file names " }
+If(!($matchincludefiles)) { Trace " + Any file name " }
 
 # --------------------------------------------------------------------
 # Check we have max/min fileage to honor
@@ -2156,53 +2204,58 @@ If (Test-Variable "BkMinFileAge") { Trace " + Min File Age : $BkMinFileAge days"
 # --------------------------------------------------------------------
 # Check we have max/min filesize to honor
 # --------------------------------------------------------------------
-If (Test-Variable "BkMaxFileSize") { Trace " + Max File Size : $BkMaxFileSize days" }
-If (Test-Variable "BkMinFileSize") { Trace " + Min File Size : $BkMinFileSize days" }
+If (Test-Variable "BkMaxFileSize") { Trace " + Max File Size : $BkMaxFileSize bytes" }
+If (Test-Variable "BkMinFileSize") { Trace " + Min File Size : $BkMinFileSize bytes" }
 
 # --------------------------------------------------------------------
 # Check we have an exclude criteria on file names
 # --------------------------------------------------------------------
-Trace " "
-Trace " Exclude Files Criteria "
-Trace " ------------------------------------------------------------------------------"
-$BkSelectionContents | Where-Object {$_ -match "^matchexcludefiles=*"} | ForEach-Object {
-	$line = $_.Substring($_.IndexOf("=") + 1)
-	If(($line)) {
-		Trace " - match $line"
-		If(!($matchexcludefiles)) { $matchexcludefiles = $line } Else { $matchexcludefiles += ("|" + $line) }
+If($BkSelectionContents | Where-Object {$_ -match "^matchexcludefiles=*"}) {
+	Trace "`n Files Exclusion Criteria "
+	Trace " ------------------------------------------------------------------------------"
+	$BkSelectionContents | Where-Object {$_ -match "^matchexcludefiles=*"} | ForEach-Object {
+		$line = $_.Substring($_.IndexOf("=") + 1).Trim()
+		If(($line)) {
+			Trace " - Regex : $line"
+			If(!($matchexcludefiles)) { $matchexcludefiles = $line } Else { $matchexcludefiles += ("|" + $line) }
+		}
 	}
+	If(!($matchexcludefiles)) { Trace " None " }
+	Trace "`n All files matching the above listed regular expressions `n WILL NOT BE INCLUDED IN BACKUP !!!"
 }
-If(!($matchexcludefiles)) { Trace " None " }
 
 # --------------------------------------------------------------------
 # Check we have an exclude criteria on paths
 # --------------------------------------------------------------------
-Trace " "
-Trace " Exclude Paths Criteria "
-Trace " ------------------------------------------------------------------------------"
-$BkSelectionContents | Where-Object {$_ -match "^matchexcludepath=*"} | ForEach-Object {
-	$line = $_.Substring($_.IndexOf("=") + 1)
-	If(($line)) {
-		Trace " -match $line"
-		If(!($matchexcludepath)) { $matchexcludepath = $line } Else { $matchexcludepath += ("|" + $line) }
+If($BkSelectionContents | Where-Object {$_ -match "^matchexcludepath=*"}) {
+	Trace "`n Exclude Paths Criteria "
+	Trace " ------------------------------------------------------------------------------"
+	$BkSelectionContents | Where-Object {$_ -match "^matchexcludepath=*"} | ForEach-Object {
+		$line = $_.Substring($_.IndexOf("=") + 1).Trim()
+		If(($line)) {
+			Trace " -match $line"
+			If(!($matchexcludepath)) { $matchexcludepath = $line } Else { $matchexcludepath += ("|" + $line) }
+		}
 	}
+	If(!($matchexcludepath))  { Trace " None "}
+	Trace "`n All directories matching the above listed regular expressions `n WILL NOT BE INCLUDED IN BACKUP !!!"
 }
-If(!($matchexcludepath))  { Trace " None "}
-
 # --------------------------------------------------------------------
 # Check we have any rule to stop digging into directories
 # --------------------------------------------------------------------
-Trace " "
-Trace " Stop Recursion Criteria "
-Trace " ------------------------------------------------------------------------------"
-$BkSelectionContents | Where-Object {$_ -match "^matchstoprecurse=*"} | ForEach-Object {
-	$line = $_.Substring($_.IndexOf("=") + 1)
-	If(($line)) {
-		Trace " -match $line"
-		If(!($matchstoprecurse)) { $matchstoprecurse = $line } Else { $matchstoprecurse += ("|" + $line) }
+If($BkSelectionContents | Where-Object {$_ -match "^matchstoprecurse=*"}) {
+	Trace "`n Stop Recursion Criteria "
+	Trace " ------------------------------------------------------------------------------"
+	$BkSelectionContents | Where-Object {$_ -match "^matchstoprecurse=*"} | ForEach-Object {
+		$line = $_.Substring($_.IndexOf("=") + 1).Trim()
+		If(($line)) {
+			Trace " -match $line"
+			If(!($matchstoprecurse)) { $matchstoprecurse = $line } Else { $matchstoprecurse += ("|" + $line) }
+		}
 	}
+	If(!($matchstoprecurse))  { Trace " None " }
+	Trace "`n All directories matching the above listed regular expressions `n WILL NOT BE RECURSED !!!"
 }
-If(!($matchstoprecurse))  { Trace " None " }
 
 # --------------------------------------------------------------------
 # Move to the $BkRootDir and make it current
@@ -2233,7 +2286,7 @@ $SWriters.Stats = New-Object -TypeName System.IO.StreamWriter($BkCatalogStats, [
 $SWriters.GetEnumerator() | ForEach-Object { $_.Value.AutoFlush = $True }
 
 Trace " "
-Trace " Scanning ..."
+Trace " Scanning Directories and Files ..."
 Trace " ------------------------------------------------------------------------------"
 
 # Begin the processing of the root folder to build up the catalogs and start counting elapsed time
@@ -2333,8 +2386,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 	# Maybe there has been some exceptions during the selection progress. 
 	# If this is the case output them here.
 	If((Get-Item $BkSelectionExcpt).Length -gt 0) {
-		Trace " "
-		Trace " Exceptions during selection process"
+		Trace "`n Exceptions during selection process"
 		Trace " ------------------------------------------------------------------------------"
 		Get-Content $BkSelectionExcpt | ForEach-Object {
 		Trace (" {0} " -f $_); $Counters.Warnings++
