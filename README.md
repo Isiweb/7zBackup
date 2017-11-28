@@ -45,13 +45,15 @@ It can help you cleaning up your directory structure from unwanted files ... in 
 * [SysInternals] Junction Tool v. 1.0.5 ( not required if running Windows Vista / 7 / 2008)
 
 ## Features
-* Backup your files in compressed archives by 7-zip
+* Backup your files in compressed archives by 7-zip (7z format or zip or tar)
 * Full, Differential, Incremental and Copy Backups
-* Option to move files into archives
+* Option to move files into archives (deleting original)
 * Flexible selection of files and paths using regular expressions
+* Flexible adjustement of compression over speed (compression level and threads)
 * Automatic removal of "old" backup archives (rotation)
 * Can remove unwanted files during the scan process
-* Send log of operations via email
+* Can remove unwanted directories during the scan process
+* Send log of operations via email also to Cc and Bcc
 * Easily manageable like a script is
 * Easily schedule your backup operations (using task scheduler)
 
