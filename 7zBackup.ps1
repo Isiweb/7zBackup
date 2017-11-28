@@ -262,6 +262,9 @@ $version = "2.1.0-Stable"  # 20171127 Anlan   Code  : Adjusted calc of threads o
 #                                     Anlan   Feat  : Added matchcleanupdirs directive in selection to remove unwanted
 #                                                     or temporary directories during scan USE WITH GREAT CARE !!!!
 #                                             Code  : Amended some typos about Bytes and Mbytes
+$version = "2.1.1-Stable"  # 20171128 Anlan   Feat  : Added some useful about archives occupation on target
+#                                     Anlan   Feat  : Addedd support for notify addresses in CC and BCC
+#                                     Anlan   Feat  : Better organization of output
 #
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -351,6 +354,8 @@ $helpText = @"
 					   
                        -- Notification specific switches --
                        [--notifyto < email1@domain`[,email2@domain`[..`]`] >]
+                       [--notifytoCc < email1@domain`[,email2@domain`[..`]`] >]
+                       [--notifytoBcc < email1@domain`[,email2@domain`[..`]`] >]
                        [--notifyfrom < sender@domain >]
                        [--notifyextra < none | inline | attach >]
                        [--smtpserver < host or ip address >]
@@ -470,6 +475,10 @@ $helpText = @"
                If you set this switch be sure to edit the script and
                insert propervalues in variables `$smtpFrom `$smtpRelay and `$smtpPort
 
+ --notifytoCc  As notifyto but in Carbon Copy
+ 
+ --notifytoBcc As notifyto but in Blind Carbon Copy
+ 
  --notifyfrom  Use this argument to set the proper address to use as 
                sender address when sending out email notifications
 
@@ -887,10 +896,8 @@ Function PostArchiving {
 	Write-Progress -Activity "." -Status "." -Completed
 	$MyContext.PostProcessFilesEnd = Get-Date
 	$MyContext.PostProcessFilesElapsed = New-TimeSpan $MyContext.PostProcessFilesStart $MyContext.PostProcessFilesEnd
-	Trace " "
-	Trace (" Completed in {0,0:n0} days {1,0:n0} hours {2,0:n0} minutes {3,0:n3} seconds" -f $MyContext.PostProcessFilesElapsed.Days, $MyContext.PostProcessFilesElapsed.Hours, $MyContext.PostProcessFilesElapsed.Minutes, ($MyContext.PostProcessFilesElapsed.Seconds + ($MyContext.PostProcessFilesElapsed.MilliSeconds/1000)) )		
-	Trace " "
-
+	Trace (" Phase time   : {0,0:n0} d : {1,0:n0} h : {2,0:n0} m : {3,0:n3} s" -f $MyContext.PostProcessFilesElapsed.Days, $MyContext.PostProcessFilesElapsed.Hours, $MyContext.PostProcessFilesElapsed.Minutes, ($MyContext.PostProcessFilesElapsed.Seconds + ($MyContext.PostProcessFilesElapsed.MilliSeconds/1000)) )
+	Trace (" Performance  : {0,0:n2} files/sec`n" -f ($i / $MyContext.PostProcessFilesElapsed.TotalSeconds ) )
 	
 }
 
@@ -1242,10 +1249,27 @@ Function Send-Notification {
 			If(($Counters.Warnings -gt 0)) { $MailMessage.Priority = [System.Net.Mail.MailPriority]::High }
 			If(($Counters.Criticals -gt 0)) { $MailMessage.Priority = [System.Net.Mail.MailPriority]::High; $BkMailSubject = "Critical ! $BkMailSubject" }
 			$MailMessage.From = $BkSmtpFrom
+			
 			If(($BkNotifyLog -is [array])) {
 				For ($x=0; $x -lt $BkNotifyLog.Length; $x++) { $MailMessage.To.Add($BkNotifyLog[$x]) }
 			} Else { 
 				$MailMessage.To.Add($BkNotifyLog) 
+			}
+			
+			If($BkNotifyLogCc) {
+			If(($BkNotifyLogCc -is [array])) {
+				For ($x=0; $x -lt $BkNotifyLogCc.Length; $x++) { $MailMessage.Cc.Add($BkNotifyLogCc[$x]) }
+			} Else { 
+				$MailMessage.Cc.Add($BkNotifyLogCc) 
+			}
+			}
+
+			If($BkNotifyLogBcc) {
+			If(($BkNotifyLogBcc -is [array])) {
+				For ($x=0; $x -lt $BkNotifyLogBcc.Length; $x++) { $MailMessage.Bcc.Add($BkNotifyLogBcc[$x]) }
+			} Else { 
+				$MailMessage.Bcc.Add($BkNotifyLogBcc) 
+			}
 			}
 
 			$MailMessage.Subject = $BkMailSubject
@@ -1493,6 +1517,8 @@ Function Validate-Arguments {
 				"--logfile"         { Set-Variable -name BkLogFile -value $BkArguments[++$i] -scope Script ; Remove-Variable -name BkLogFile -scope Script }
 				"--notify"          { Set-Variable -name BkNotifyLog -value $BkArguments[++$i] -scope Script }
 				"--notifyto"        { Set-Variable -name BkNotifyLog -value $BkArguments[++$i] -scope Script }
+				"--notifytoCc"      { Set-Variable -name BkNotifyLogCc -value $BkArguments[++$i] -scope Script }
+				"--notifytoBcc"     { Set-Variable -name BkNotifyLogBcc -value $BkArguments[++$i] -scope Script }
 				"--notifyfrom"      { Set-Variable -name BkSmtpFrom -value $BkArguments[++$i] -scope Script }
 				"--notifyextra"     { Set-Variable -name BkNotifyExtra -value $BkArguments[++$i] -scope Script }		
 				"--smtpserver"      { Set-Variable -name BkSmtpRelay -value $BkArguments[++$i] -scope Script }
@@ -1507,7 +1533,7 @@ Function Validate-Arguments {
 				"--pre"             { Set-Variable -name BkPreAction -value $BkArguments[++$i] -scope Script }
 				"--post"            { Set-Variable -name BkPostAction -value $BkArguments[++$i] -scope Script }
 				
-				Default { Write-Output ("Unknown argument {0}" -f $BkArguments[$i]); return }
+				Default { Write-Output ("Unknown argument {0}" -f $BkArguments[$i]) }
 			}
 			$i++
 		}
@@ -1860,6 +1886,38 @@ Function Validate-Variables {
 		}
 
 		# ----------------------------------------------------------------------------------------------------------------------
+		# To CC Email Address(es) - Checks
+		# ----------------------------------------------------------------------------------------------------------------------
+		If(!($BkNotifyLogCc -is [array])) { 
+			Set-Variable -Name NotifyRecipients -value @($BkNotifyLogCc) -scope Script
+			$NotifyRecipients | Where-Object {!(IsValidEmailAddress $_)} | Write-Output ("Invalid --notifyCc address {0}" -f $_)
+			$BkNotifyLogCc = @($NotifyRecipients | Where-Object {IsValidEmailAddress $_}) 
+			Remove-Variable -Name NotifyRecipients -Scope Script
+		} Else {
+			$BkNotifyLogCc | Where-Object {!(IsValidEmailAddress $_)} | Write-Output ("Invalid --notifyCc address {0}" -f $_)
+			$BkNotifyLogCc = @($BkNotifyLogCc | Where-Object {IsValidEmailAddress $_}) 
+		}
+		If($BkNotifyLogCc.Count -lt 1) {
+			Remove-Variable -Name BkNotifyLogCc -Scope Script
+		}
+		
+		# ----------------------------------------------------------------------------------------------------------------------
+		# To BCC Email Address(es) - Checks
+		# ----------------------------------------------------------------------------------------------------------------------
+		If(!($BkNotifyLogBcc -is [array])) { 
+			Set-Variable -Name NotifyRecipients -value @($BkNotifyLogBcc) -scope Script
+			$NotifyRecipients | Where-Object {!(IsValidEmailAddress $_)} | Write-Output ("Invalid --notifyBcc address {0}" -f $_)
+			$BkNotifyLogBcc = @($NotifyRecipients | Where-Object {IsValidEmailAddress $_}) 
+			Remove-Variable -Name NotifyRecipients -Scope Script
+		} Else {
+			$BkNotifyLogBcc | Where-Object {!(IsValidEmailAddress $_)} | Write-Output ("Invalid --notifyBcc address {0}" -f $_)
+			$BkNotifyLogBcc = @($BkNotifyLogBcc | Where-Object {IsValidEmailAddress $_}) 
+		}
+		If($BkNotifyLogBcc.Count -lt 1) {
+			Remove-Variable -Name BkNotifyLogBcc -Scope Script
+		}
+		
+		# ----------------------------------------------------------------------------------------------------------------------
 		# From Email Addresses - Checks
 		# ----------------------------------------------------------------------------------------------------------------------
 		If(!(Test-Variable "BkSmtpFrom"))  { 
@@ -2076,7 +2134,7 @@ If(Test-Variable "BkPreAction") {
 
 # Initalize Operations
 # Output all running context informations
-Trace " Started on ........ :  $(Get-Date)"
+Trace " Started on ........ :  $((Get-Date -f "MMM dd, yyyy hh:mm:ss"))"
 Trace " Backup Type ....... :  $BkType"
 If($BkClearBit -eq $True)    { Trace " Files' Archive attr :  Will be cleared" } Else { Trace " Files' Archive attr :  Will stay unchanged" }
 Trace " Selection File .... :  $BkSelection"
@@ -2353,9 +2411,9 @@ $MyContext.SelectionEnd = Get-Date
 $MyContext.SelectionElapsed = New-TimeSpan $MyContext.SelectionStart $MyContext.SelectionEnd
 
 # Trace informations about what is selected
-Trace " "
-Trace (" Completed in {0,0:n0} days {1,0:n0} hours {2,0:n0} minutes {3,0:n3} seconds" -f $MyContext.SelectionElapsed.Days, $MyContext.SelectionElapsed.Hours, $MyContext.SelectionElapsed.Minutes, ($MyContext.SelectionElapsed.Seconds + ($MyContext.SelectionElapsed.MilliSeconds/1000)) )
-Trace (" Selected {0,0:n0} out of {1,0:n0} files in {2,0:n0} folders. {3,0:n2} MBytes to backup" -f  $Counters.FilesSelected, $Counters.FilesProcessed, $Counters.FoldersDone, ($Counters.BytesSelected/1mb))
+Trace (" Phase time   : {0,0:n0} d : {1,0:n0} h : {2,0:n0} m : {3,0:n3} s" -f $MyContext.SelectionElapsed.Days, $MyContext.SelectionElapsed.Hours, $MyContext.SelectionElapsed.Minutes, ($MyContext.SelectionElapsed.Seconds + ($MyContext.SelectionElapsed.MilliSeconds/1000)) )
+Trace (" Selected     : {0,0:n0} out of {1,0:n0} files in {2,0:n0} folders. {3,0:n2} MBytes to backup" -f  $Counters.FilesSelected, $Counters.FilesProcessed, $Counters.FoldersDone, ($Counters.BytesSelected/1mb))
+Trace (" Performance  : {0,0:n2} files/sec " -f ( $Counters.FilesProcessed / $MyContext.SelectionElapsed.TotalSeconds ) )
 
 
 # Early exit from the process if user cancel or there is nothingto backup
@@ -2412,10 +2470,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		}
 		Trace "                                  ----------- ----------------- "
 		Trace (" {0,-31} {1,11:n0} {2,17:n2}" -f "Total", $totalCount, ($totalBytes/1MB))
-		Trace "                                  =========== ================= "
-		Trace (" {0,-31} {1,11:n0}  {2}" -f "Performance average", ($Counters.FilesProcessed / $MyContext.SelectionElapsed.TotalMinutes ), "files per minute")
-		Trace "                                  =========== ================= "
-		Trace " "
+		Trace "                                  =========== ================= `n"
 		
 
 	}
@@ -2611,11 +2666,11 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		If(($Bk7ZipRetc -lt 2) -and ($ArchiveSize -gt 0) -and !(Check-CTRLCRequest)) {
 			
 			# Output informations in log file 
-			Trace " "
-			Trace " Created $BkArchiveName in $BkDestPath "
-			Trace (" Archive Size {0,0:n2} MB = {1,2:n2}% of original size" -f ($ArchiveSize / 1Mb), ((($ArchiveSize / $Counters.BytesSelected)) * 100))
-			Trace (" Completed in {0,0:n0} days, {1,0:n0} hours, {2,0:n0} minutes, {3,0:n3} seconds" -f $MyContext.CompressionElapsed.Days, $MyContext.CompressionElapsed.Hours, $MyContext.CompressionElapsed.Minutes, ($MyContext.CompressionElapsed.Seconds + $MyContext.CompressionElapsed.Milliseconds / 1000) )
-			Trace (" Perfomance {0,0:n2} MB/Sec." -f (($Counters.BytesSelected / $MyContext.CompressionElapsed.TotalSeconds) / 1MB))
+			Trace (" Created      : {1} in {0} " -f $BkDestPath, $BkArchiveName)
+			Trace (" Archive Size : {0,0:n2} MB = {1,2:n2}% of original size" -f ($ArchiveSize / 1Mb), ((($ArchiveSize / $Counters.BytesSelected)) * 100))
+			Trace (" 7zip time    : {0,0:n0} d : {1,0:n0} h : {2,0:n0} m : {3,0:n3} s" -f $MyContext.CompressionElapsed.Days, $MyContext.CompressionElapsed.Hours, $MyContext.CompressionElapsed.Minutes, ($MyContext.CompressionElapsed.Seconds + $MyContext.CompressionElapsed.Milliseconds / 1000) )
+			Trace (" Performance  : {0,0:n2} files/sec" -f ($Counters.FilesSelected / $MyContext.CompressionElapsed.TotalSeconds) )
+			Trace (" IO Avg Speed : Read {0,0:n2} MB/Sec / Write {1,0:n2} MB/Sec" -f (($Counters.BytesSelected / $MyContext.CompressionElapsed.TotalSeconds) / 1MB), (($ArchiveSize / $MyContext.CompressionElapsed.TotalSeconds) / 1MB) )
 			Trace " "
 				
 			
@@ -2630,15 +2685,16 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 			If(!(Check-CTRLCRequest)) {
 				If(!(Test-Variable "BkRotate")) { Set-Variable -name "BkRotate" -value ([int]9999) -scope Script }
 				If(($BkRotate -ge 1)) {
+					$totalArchiveBytes = [int64]0
 					$fileNameRgx = ("$([Regex]::Escape($BkArchivePrefix))-$BkType-[0-9]{8}-[0-9]{4,6}\.(7z|zip|tar)(\.\d{3})?")
 					Trace " Archives in $BkDestPath"
 					Trace " ------------------------------------------------------------------------------"
 					Get-ChildItem $BkDestPath | ?{ $_.Name -match $fileNameRgx -and !$_.PSIscontainer } | sort @{expression={$_.Name};Descending=$true} | foreach-object {
 						If(!($BkRotate -le 0)) { 
 							If ($_.Name -match ([Regex]::Escape($BkArchiveName))) {
-								Trace (" New      : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) )
+								Trace (" New      : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) ); $totalArchiveBytes += [int64]$_.Length
 							} Else {
-								Trace (" Kept     : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) )
+								Trace (" Kept     : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) ); $totalArchiveBytes += [int64]$_.Length
 							}
 							
 							# Check is volumized archive
@@ -2647,23 +2703,26 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 							} 
 							
 						} Else {
-							remove-item -LiteralPath (Join-Path $BkDestPath $_.Name) -ErrorAction "SilentlyContinue" | Out-Null
+							Remove-Item -LiteralPath (Join-Path $BkDestPath $_.Name) -ErrorAction "SilentlyContinue" | Out-Null
 							if ($?) { Trace (" Removed  : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) ) } Else { Trace " WARNING Failed to remove $_.Name"}
 						}
 					}
-					Trace " "
+					Trace " ------------------------------------------------------------------------------"
+					Trace (" {0,-59} {1,15:n2} MB" -f "Used space by listed archives (New and Kept)", $($totalArchiveBytes / 1MB) )
+					Trace (" {0,-59} {1,15:n2} MB" -f "Remaining Free space on target", $((([int64](GetDestPathFreeSpace -target $BkDestPath))) / 1MB) )
+					Trace " ------------------------------------------------------------------------------`n"
+					
 				}
 			}
 		
-			Trace " "
 			If(($Counters.Warnings -gt 0)) {
-				Trace (" Done with : " + $Counters.Warnings + " warnings. Check logs!")
+				Trace (" Task status : Done with : " + $Counters.Warnings + " warnings. Check logs!")
 			} Else {
-				Trace " All Done !! Yuppieee"
+				Trace " Task status : All Done !! Yuppieee"
 			}
 			$MyContext.TotalElapsed = New-TimeSpan $MyContext.SelectionStart $(Get-Date)
-			Trace (" Completed in {0,0:n0} days, {1,0:n0} hours, {2,0:n0} minutes, {3,0:n0} seconds" -f $MyContext.TotalElapsed.Days, $MyContext.TotalElapsed.Hours, $MyContext.TotalElapsed.Minutes, $MyContext.TotalElapsed.Seconds )
-			Trace " "
+			Trace (" Task time   : {0,0:n0} d : {1,0:n0} h : {2,0:n0} m : {3,0:n0} s" -f $MyContext.TotalElapsed.Days, $MyContext.TotalElapsed.Hours, $MyContext.TotalElapsed.Minutes, $MyContext.TotalElapsed.Seconds )
+			Trace (" Task end    : {0}`n" -f (Get-Date -f "MMM dd, yyyy hh:mm:ss") )
 			
 		} Else {
 		

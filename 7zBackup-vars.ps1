@@ -352,6 +352,56 @@ Set-Variable -Name BkJunctionBin -Value (Join-Path $Env:ProgramFiles  "\SysInter
 #  Set-Variable -Name BkNotifyLog -Value @("someemail@somedomain.com", "someotheremail@somedomain.com") -Scope 1
 
 # --------------------------------------------------------------------
+#  Variable       : BkNotifyLogCc
+#  Argument Name  : --notifyCc
+#  Description    : Holds the email address(es) to send the report
+#                   of operations in Cc.
+#  Comments   
+#  -------------------------------------------------------------------
+#  Use this argument to set a single email address, or a list of email
+#  addresses, which will receive the detailed report of operations.
+#  If you mean to address the report to a single email address then
+#  you will want to set the variable as a normal string.
+#  If you mean to have multiple addresses to send the report to, then
+#  you will have to set the variable as an array.
+#
+#  PLEASE NOTE 
+#  Each email address undergoes a check to verify it is properly
+#  formatted.
+#  -------------------------------------------------------------------
+#  Uncomment the following Set-Variable statement and set proper
+#  "<value>" if you want to set the value for the 7zBackup script.
+#  -------------------------------------------------------------------
+#  Set-Variable -Name BkNotifyLogCc -Value "someemail@somedomain.com" -Scope 1
+# - or -
+#  Set-Variable -Name BkNotifyLogCc -Value @("someemail@somedomain.com", "someotheremail@somedomain.com") -Scope 1
+
+# --------------------------------------------------------------------
+#  Variable       : BkNotifyLogBcc
+#  Argument Name  : --notifyBcc
+#  Description    : Holds the email address(es) to send the report
+#                   of operations in Bcc.
+#  Comments   
+#  -------------------------------------------------------------------
+#  Use this argument to set a single email address, or a list of email
+#  addresses, which will receive the detailed report of operations.
+#  If you mean to address the report to a single email address then
+#  you will want to set the variable as a normal string.
+#  If you mean to have multiple addresses to send the report to, then
+#  you will have to set the variable as an array.
+#
+#  PLEASE NOTE 
+#  Each email address undergoes a check to verify it is properly
+#  formatted.
+#  -------------------------------------------------------------------
+#  Uncomment the following Set-Variable statement and set proper
+#  "<value>" if you want to set the value for the 7zBackup script.
+#  -------------------------------------------------------------------
+#  Set-Variable -Name BkNotifyLogBcc -Value "someemail@somedomain.com" -Scope 1
+# - or -
+#  Set-Variable -Name BkNotifyLogBcc -Value @("someemail@somedomain.com", "someotheremail@somedomain.com") -Scope 1
+
+# --------------------------------------------------------------------
 #  Variable       : BkNotifyExtra
 #  Argument Name  : --notifyextra 
 #  Description    : Specifies if you want extra info in the notification
