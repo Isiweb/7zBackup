@@ -27,7 +27,7 @@
 #
 #  * Andrea Lanfranchi - Anlan (http://www.anlan.com)
 #
-# -- Version History –
+# -- Version History â€“
 #            X.XXX         YYYYMMDD Author   Description
 #          -------------   -------- -------- --------------------------------------------------
 $version = "01.000-beta" # 20091104 Anlan    First release
@@ -808,7 +808,7 @@ Function New-RootDir {
 		If([int]$MyContext.WinVer[0] -lt 6 ) {
 			New-Item (Join-Path -Path $BkRootDir -ChildPath "__README__PLEASE__README__.txt") -type File -value "This directory contains Junctions.`nDO NOT DELETE THIS DIRECTORY AND IT'S CONTENTS USING WINDOWS EXPLORER.`nUse Junction -d to delete junctions and then safely delete the directory." | Out-Null
 		} Else {
-			New-Item (Join-Path -Path $BkRootDir -ChildPath "__README__PLEASE__README__.txt") -type File -value "This directory contains Symbolic Links.`nDO NOT DELETE THIS DIRECTORY AND IT'S CONTENTS USING WINDOWS EXPLORER.`nUse RD command delete symbolic links and then safely delete the directory." | Out-Null
+			New-Item (Join-Path -Path $BkRootDir -ChildPath "__README__PLEASE__README__.txt") -type File -value "This directory contains Symbolic Links.`nDO NOT DELETE THIS DIRECTORY AND IT'S CONTENTS USING WINDOWS EXPLORER.`nUse RD command delete symbolic links and then safely delete the directory, use cmd /c rmdir <thesymlink'sname> in case of using Powershell." | Out-Null
 		}
 		If(!$?) {
 			Write-Output ("Can't write into {0}. Check permissions." -f $path)
