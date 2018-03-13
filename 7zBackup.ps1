@@ -881,8 +881,7 @@ Function PostArchiving {
 			} Else {
 				If(($item.Attributes -band $archiveAttr)) {
 
-					$item = ( $item | Set-ItemProperty -Name Attributes -Value ($_.Attributes -bXor $archiveAttr) -Force -PassThru )
-					# Set-ItemProperty -Path $item.FullName -Name Attributes -Value ((Get-ItemProperty $item).Attributes -bXOR $archiveAttr) -Force
+					$item = Set-ItemProperty -Path $item.FullName -Name Attributes -Value ($item.Attributes -bXOR $archiveAttr) -Force -PassThru
 					If(!($?)) {
 						Trace (" FAILED : {0}" -f $BkCompressDetailItems[$i].File ); $Counters.Warnings++
 					}
