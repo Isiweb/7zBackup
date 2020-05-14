@@ -266,6 +266,11 @@ $version = "2.1.1-Stable"  # 20171128 Anlan   Feat  : Added some useful about ar
 #                                     Anlan   Feat  : Addedd support for notify addresses in CC and BCC
 #                                     Anlan   Feat  : Better organization of output
 #
+$version = "2.1.2-Stable"  # 20180322 Anlan   Feat  : Adjusted clear archive bit
+#
+$version = "2.1.3-Stable"  # 20200514 Anlan   Code  : Enclosed [console]::TreatControlCAsInput in Try Catch block
+#                                                     as it may throw is console is launched with stdin redirection
+
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
 # This program is free software; you can redistribute it and/or modify
@@ -657,7 +662,10 @@ Function Clear-Script {
 	If ((Test-Variable "BkLockFile")) {if ((Test-Path ($BkLockFile))) { Remove-Item -LiteralPath $BkLockFile | Out-Null }}
 	Set-Location ($MyContext.StartDir)
 	If ((Test-Path -Path ($BkRootDir) -PathType Container)) { Remove-RootDir $BkRootDir | Out-Null }
-	[console]::TreatControlCAsInput = $False
+	
+	Try {
+		[console]::TreatControlCAsInput = $False
+	} Catch {}
 	
 }
 
@@ -827,7 +835,9 @@ Function New-RootDir {
 # -----------------------------------------------------------------------------
 Function PostArchiving {
 	
-	[console]::TreatControlCAsInput = $True
+	Try {
+		[console]::TreatControlCAsInput = $True
+	} Catch {}
 	# -----------------------------------------------------------
 	# Remove created placeholders if any
 	# -----------------------------------------------------------
@@ -912,7 +922,9 @@ Function PostArchiving {
 # -----------------------------------------------------------------------------
 Function ProcessFolder ($thisFolder) {
 
-	[console]::TreatControlCAsInput = $True
+	Try {
+		[console]::TreatControlCAsInput = $True
+	} Catch {}
 	# Increment number of processed folders
 	$Counters.FoldersDone++
 	
@@ -1205,7 +1217,9 @@ Function Remove-SymLink  {
 # -----------------------------------------------------------------------------
 Function Send-Notification {
 
-		[console]::TreatControlCAsInput = $True
+		Try {
+			[console]::TreatControlCAsInput = $True
+		} Catch {}
 		
 		# Ensure file stream writers are closed
 		$SWriters.GetEnumerator() | ForEach-Object {
@@ -2041,7 +2055,9 @@ Function Validate-Variables {
 # ====================================================================
 
 # This will prevent unhandled exit from the script
-[console]::TreatControlCAsInput = $False
+Try {
+	[console]::TreatControlCAsInput = $False
+} Catch {}
 
 # Clean all script scoped variables beginning with "Bk" and "match"
 Get-ChildItem variable:script:Bk* | Remove-Variable | Out-Null
@@ -2069,7 +2085,7 @@ Trace $headerText
 
 # Check For the presence of "--help" argument switch
 If($args.length -ne 0) { 
-	switch -wildcard ($args) { "*--help*" {Trace $helpText ; [console]::TreatControlCAsInput = $False; Return} }
+	switch -wildcard ($args) { "*--help*" {Trace $helpText ; Try {[console]::TreatControlCAsInput = $False} Catch{} ; Return} }
 } 
 
 # Import hard coded variables if present -vars.ps1 script
