@@ -270,6 +270,7 @@ $version = "2.1.2-Stable"  # 20180322 Anlan   Feat  : Adjusted clear archive bit
 #
 $version = "2.1.3-Stable"  # 20200514 Anlan   Code  : Enclosed [console]::TreatControlCAsInput in Try Catch block
 #                                                     as it may throw is console is launched with stdin redirection
+$version = "2.1.4-Stable"  # 20200824 Anlan   Code  : Speed up PostArchiving a little bit using a range iterator
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -868,6 +869,10 @@ Function PostArchiving {
 	# Remove  or clear files successfully archived if necessary
 	$MyContext.PostProcessFilesStart = Get-Date
 	Set-Variable -Name "ArchivedItemsCount" -Value ($BkCompressDetailItems.Count) -Scope Local
+	Set-Variable -Name "ItemsBatchSize" -Value ($ArchivedItemsCount / 100) -Scope Local
+	Set-Variable -Name "ItemsCountDown" -Value ($ItemsBatchSize) -Scope Local
+	Set-Variable -Name "ItemsPercent" -Value 0 -Scope Local
+	
 	If($BkType -eq "move") {
 		Set-Variable -Name "OperationType" -Value "Removing" -Scope Local
 		Trace " Deleting Successfully Archived Files"
@@ -878,27 +883,32 @@ Function PostArchiving {
 	Trace " -------------------------------------------"
 	
 	$archiveAttr = [System.IO.FileAttributes]::Archive
-	
-	For ($i=0; $i -lt $ArchivedItemsCount; $i++) {
+	foreach ($entry in $BkCompressDetailItems) {
 		If(Check-CTRLCRequest -eq $True) { break; }
-		$percentCompleted = ( $i / ($ArchivedItemsCount - 1) * 100 )
-		Write-Progress -Activity  "Performing post archive operations" -Status "Please wait ..." -CurrentOperation ("{0} successfully archived files" -f $OperationType)  -PercentComplete $percentCompleted
-		$item = Get-Item -LiteralPath (Join-Path $BkRootDir $BkCompressDetailItems[$i].File) -Force
+		
+		$item = Get-Item -LiteralPath (Join-Path $BkRootDir $entry.File) -Force
 		if($? -and $item) {
 			If($BkType -eq "move") {
 				$item | ? { !$_.PSIsContainer } | Remove-Item -Force | Out-Null
-				If(!($?)) {Trace (" FAILED : {0}" -f $BkCompressDetailItems[$i].File ); $Counters.Warnings++  }
+				If(!($?)) {Trace (" FAILED : {0}" -f $entry.File ); $Counters.Warnings++  }
 			} Else {
 				If(($item.Attributes -band $archiveAttr)) {
 
 					$item = Set-ItemProperty -Path $item.FullName -Name Attributes -Value ($item.Attributes -bXOR $archiveAttr) -Force -PassThru
 					If(!($?)) {
-						Trace (" FAILED : {0}" -f $BkCompressDetailItems[$i].File ); $Counters.Warnings++
+						Trace (" FAILED : {0}" -f $entry.File ); $Counters.Warnings++
 					}
 				}
 			}
 		} Else {
-			Write-Host " ? " + (Join-Path $BkRootDir $BkCompressDetailItems[$i].File)
+			Write-Host " ? " + (Join-Path $BkRootDir $entry.File)
+		}
+		
+		$ItemsCountDown--
+		If($ItemsCountDown -le 0) {
+			$ItemsPercent++
+			$ItemsCountDown = $ItemsBatchSize
+			Write-Progress -Activity  "Performing post archive operations" -Status "Please wait ..." -CurrentOperation ("{0} successfully archived files" -f $OperationType)  -PercentComplete ($ItemsPercent * 100)
 		}
 	}
 	
