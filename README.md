@@ -1,11 +1,3 @@
-# Donation ware
-If you like this piece of software a small donation is highly appreciated.
-Please use one of the following addresses for your donations:
-* Bitcoin : bc1q3ltqwqp0pwy070ss9j32637pw2glmm87qj0wwn
-* Dash (Digital Cash) : XtydCExz6cRJLdc8gT5ZnGGpsTVKZ9j77T
-* Doge : DJXpPy9wWf5BRVBET9HhpgyGuoPq75xkfR
-* Ethereum : 0x4813aEEE0c30C584C559fa8Dc7424481E2e9Fc91
-
 # Project Description
 7zBackup is a PowerShell script aimed to help you automate your backup on-file tasks. 7zbackup leverages the great compression performances offered by 7-Zip while offering the great option to have different file sources stored in a single compressed archive.
 
