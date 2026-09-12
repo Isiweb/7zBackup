@@ -304,6 +304,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     progress percent went over 100, hiding the progress bar
 #                                             Bug   : Pre-Vista junctions: Make-Junction passed an undefined target and
 #                                                     Remove-Junction had a broken Start-Sleep call
+#                                             Bug   : Logged real paths were wrong when a folder name contained the alias, and the
+#                                                     nofollowjunctions log named the parent instead of the skipped junction
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1052,8 +1054,10 @@ Function ProcessFolder ($thisFolder) {
 	$childItems = @(Get-ChildItem -LiteralPath $thisFolder.RelativeName -Force -ErrorVariable childItemsScanErrors)
 	If($childItemsScanErrors) {
 		for ($i=0; $i -lt $childItemsScanErrors.count; $i++) {
-			$realTargetName = $childItemsScanErrors[$i].CategoryInfo.TargetName.Replace($BkRootDir + "\" , "")
-			$realTargetName = $realTargetName.Replace($realTargetName.Split("\")[0],"")
+			$realTargetName = [string]$childItemsScanErrors[$i].CategoryInfo.TargetName
+			# Strip the root dir (any case), then only the leading alias: a folder name may contain the alias
+			If($realTargetName.StartsWith($BkRootDir + "\", [System.StringComparison]::OrdinalIgnoreCase)) { $realTargetName = $realTargetName.Substring($BkRootDir.Length + 1) }
+			If($realTargetName.StartsWith($thisFolder.ContainerAlias, [System.StringComparison]::OrdinalIgnoreCase)) { $realTargetName = $realTargetName.Substring($thisFolder.ContainerAlias.Length) }
 			$realTargetName = [string](Join-Path -Path $BkSources[$thisFolder.ContainerAlias] -ChildPath $realTargetName)
 			$SWriters.Exceptions.WriteLine(("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childItemsScanErrors[$i].CategoryInfo.Reason, $realTargetName))
 			Trace (" Exception id {0} on {1} " -f $Counters.Exceptions, $realTargetName)
@@ -1179,12 +1183,12 @@ Function ProcessFolder ($thisFolder) {
 				# Built from the parent: FullName may differ in case from $BkRootDir (e.g. lowercase --workdrive)
 				$childFolderItem.RelativeName = $thisFolder.RelativeName + "\" + $childFolders[$i].Name
 				$childFolderItem.ContainerAlias = $thisFolder.ContainerAlias
-				$childFolderItem.RealName = Join-Path -Path $BkSources[$thisFolder.ContainerAlias] -ChildPath ($childFolderItem.RelativeName.Replace($thisFolder.ContainerAlias, ""))
+				$childFolderItem.RealName = Join-Path -Path $BkSources[$thisFolder.ContainerAlias] -ChildPath ($childFolderItem.RelativeName.Substring($thisFolder.ContainerAlias.Length))
 				$childFolderItem.Depth = ($thisFolder.Depth + 1);
 				
 				# Check subdir against recursion in junctions
 				If(($BkNoFollowJunctions) -and ($childFolders[$i].Attributes -band 1024)) {
-					$SWriters.Exclusions.WriteLine([string]("{0}`t{1}`t{2}`t{3}" -f $Counters.Exclusions++, "nofollowjunctions", "D", $thisFolder.RealName))
+					$SWriters.Exclusions.WriteLine([string]("{0}`t{1}`t{2}`t{3}" -f $Counters.Exclusions++, "nofollowjunctions", "D", $childFolderItem.RealName))
 					continue
 				}
 				

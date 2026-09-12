@@ -1,7 +1,7 @@
 # Integration test for selection exceptions (e.g. access denied folders).
 # Runs the 7zBackup.ps1 script body from the creation of the catalog files to
-# the report of selection exceptions: exceptions must be logged and counted
-# as warnings, and a clean scan must report none.
+# the report of selection exceptions: exceptions must be logged with the real
+# path and counted as warnings, and a clean scan must report none.
 #
 # Usage: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\SelectionExceptions.Test.ps1
 
@@ -31,23 +31,24 @@ Assert (($first -ge 0) -and ($last -gt $first)) "precondition, script body range
 
 $userSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 
+# The denied folder name contains the alias (Docs / MyDocs): the logged real path must stay intact
 foreach ($withDenied in $True, $False) {
 	Write-Host "`n Case: scan with an access denied folder = $withDenied"
 	$work      = Join-Path $env:TEMP ("7zb-test-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
 	$source    = Join-Path $work "source"
 	$BkRootDir = Join-Path $work "root"
-	New-Item -ItemType Directory "$source\denied", $BkRootDir -Force | Out-Null
+	New-Item -ItemType Directory "$source\MyDocs", $BkRootDir -Force | Out-Null
 	Set-Content -LiteralPath "$source\ok.txt" -Value "ok"
-	Set-Content -LiteralPath "$source\denied\secret.txt" -Value "secret"
-	If($withDenied) { icacls "$source\denied" /deny "*${userSid}:(OI)(CI)(RX)" | Out-Null }
+	Set-Content -LiteralPath "$source\MyDocs\secret.txt" -Value "secret"
+	If($withDenied) { icacls "$source\MyDocs" /deny "*${userSid}:(OI)(CI)(RX)" | Out-Null }
 	# 7zBackup.ps1 links each source into the root dir: a junction does the same without admin rights
-	cmd /c "mklink /J `"$BkRootDir\Alias`" `"$source`"" | Out-Null
+	cmd /c "mklink /J `"$BkRootDir\Docs`" `"$source`"" | Out-Null
 	$BkSelection = Join-Path $work "selection.txt"
-	Set-Content -LiteralPath $BkSelection -Value "includesource=$source|alias=Alias"
+	Set-Content -LiteralPath $BkSelection -Value "includesource=$source|alias=Docs"
 
 	# State the script body has prepared before this range
 	$BkType    = "full"
-	$BkSources = @{ Alias = $source }
+	$BkSources = @{ Docs = $source }
 	$Counters  = @{ Exclusions = 0; Warnings = 0; Exceptions = 0; Criticals = 0; FoldersDone = 0; FilesProcessed = 0; FilesSelected = 0; BytesSelected = [int64]0; BytesAvailable = [int64]0; PlaceHolders = @() }
 	$SWriters  = @{}
 	$MyContext = [hashtable]::Synchronized(@{ Cancelling = $False; Logger = (New-Object System.Text.StringBuilder); StartDir = $env:TEMP; WinVer = @("10") })
@@ -59,17 +60,17 @@ foreach ($withDenied in $True, $False) {
 	$log = $MyContext.Logger.ToString()
 	$exceptionLines = @(Get-Content -LiteralPath (Join-Path $BkRootDir "Selection-Excpt.csv") | Select-Object -Skip 1)
 	If($withDenied) {
-		Assert (@($exceptionLines -like "*denied*").Count -eq 1)      "exception for the denied folder is written to Selection-Excpt.csv"
+		Assert (@($exceptionLines | Where-Object { $_.EndsWith("`t$source\MyDocs") }).Count -eq 1) "exception is written with the real path of the denied folder [$($exceptionLines -join ' | ')]"
 		Assert ($log.Contains("Exceptions during selection process")) "exceptions are reported in the log"
 		Assert ($Counters.Warnings -eq 1)                              "the exception is counted as one warning"
-		icacls "$source\denied" /remove:d "*$userSid" | Out-Null
+		icacls "$source\MyDocs" /remove:d "*$userSid" | Out-Null
 	} Else {
 		Assert ($exceptionLines.Count -eq 0)                             "no exception is written"
 		Assert (!$log.Contains("Exceptions during selection process"))   "no exceptions section in the log"
 		Assert ($Counters.Warnings -eq 0)                                "no warning is counted"
 	}
 
-	cmd /c "rd `"$BkRootDir\Alias`""
+	cmd /c "rd `"$BkRootDir\Docs`""
 	Remove-Item -LiteralPath $work -Recurse -Force
 }
 

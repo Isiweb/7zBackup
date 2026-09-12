@@ -23,17 +23,17 @@ Function New-WorkDir {
 	Write-Output $work
 }
 
-# Scans $source aliased as "Alias" the way the 7zBackup.ps1 script body does.
-# Returns the lines written to the inclusion catalog.
-Function Invoke-Scan ([string]$work, [string]$source, [switch]$lowerCaseDrive) {
+# Scans $source aliased as $aliasName the way the 7zBackup.ps1 script body does.
+# Returns the lines written to the inclusion catalog; exclusions are left in $work\Exclusions.txt.
+Function Invoke-Scan ([string]$work, [string]$source, [switch]$lowerCaseDrive, [string]$aliasName = "Alias") {
 	$script:BkRootDir = Join-Path $work "root"
 	# --workdrive accepts a lowercase letter: the root dir path then differs in case from paths PowerShell returns
 	If($lowerCaseDrive) { $script:BkRootDir = $script:BkRootDir.Substring(0, 1).ToLower() + $script:BkRootDir.Substring(1) }
 	New-Item -ItemType Directory $script:BkRootDir -Force | Out-Null
 	# 7zBackup.ps1 links each source into the root dir: a junction does the same without admin rights
-	cmd /c "mklink /J `"$script:BkRootDir\Alias`" `"$source`"" | Out-Null
+	cmd /c "mklink /J `"$script:BkRootDir\$aliasName`" `"$source`"" | Out-Null
 
-	$script:BkSources = @{ Alias = $source }
+	$script:BkSources = @{ $aliasName = $source }
 	$script:Counters  = @{ Exclusions = 0; Exceptions = 0; FoldersDone = 0; FilesProcessed = 0; FilesSelected = 0; BytesSelected = [int64]0; PlaceHolders = @() }
 	$script:MyContext = [hashtable]::Synchronized(@{ Cancelling = $False; Logger = (New-Object System.Text.StringBuilder); SelectionStart = (Get-Date) })
 	$inclusions       = Join-Path $work "Catalog-Include.txt"
@@ -42,7 +42,7 @@ Function Invoke-Scan ([string]$work, [string]$source, [switch]$lowerCaseDrive) {
 
 	$script:catalogFolders      = New-Object System.Collections.ArrayList
 	$script:catalogFoldersIndex = 0
-	[void]$script:catalogFolders.Add(@{ Name = "Alias"; FullName = "$script:BkRootDir\Alias"; RelativeName = "Alias"; ContainerAlias = "Alias"; RealName = $source; Depth = 0 })
+	[void]$script:catalogFolders.Add(@{ Name = $aliasName; FullName = "$script:BkRootDir\$aliasName"; RelativeName = $aliasName; ContainerAlias = $aliasName; RealName = $source; Depth = 0 })
 	Set-Location -Path $script:BkRootDir
 	While ($True) {
 		If(Check-CTRLCRequest) {break}
@@ -51,7 +51,7 @@ Function Invoke-Scan ([string]$work, [string]$source, [switch]$lowerCaseDrive) {
 	}
 	Set-Location -Path $env:TEMP
 	$script:SWriters.Values | ForEach-Object { $_.Close() }
-	cmd /c "rd `"$script:BkRootDir\Alias`""
+	cmd /c "rd `"$script:BkRootDir\$aliasName`""
 	Write-Output @(Get-Content -LiteralPath $inclusions -Encoding UTF8)
 }
 
@@ -69,9 +69,11 @@ Assert ([int]((Get-Item -LiteralPath "$source\Parent\AJunction" -Force).Attribut
 
 $BkType = "full"; $BkNoFollowJunctions = $True; $BkDryRun = $False; $matchcleanupfiles = $null
 $included = @(Invoke-Scan $work $source)
+$excluded = @(Get-Content -LiteralPath "$work\Exclusions.txt")
 Assert ($included -contains "Alias\Parent\B\b.txt") "file in B (after the skipped junction) is selected"
 Assert ($included -contains "Alias\Parent\C\c.txt") "file in C (after the skipped junction) is selected"
 Assert (@($included -like "*e.txt").Count -eq 0)    "file behind the skipped junction is not selected"
+Assert (@($excluded | Where-Object { $_.EndsWith("`tnofollowjunctions`tD`t$source\Parent\AJunction") }).Count -eq 1) "the skipped junction itself is named in the exclusion log"
 
 cmd /c "rd `"$source\Parent\AJunction`""
 Remove-Item -LiteralPath $work -Recurse -Force
@@ -111,6 +113,20 @@ $BkType = "full"; $BkNoFollowJunctions = $False; $BkDryRun = $False; $matchclean
 $included = @(Invoke-Scan $work $source -lowerCaseDrive)
 Assert ($included -contains "Alias\sub\deep.txt")      "file in a subfolder is selected with its path relative to the root dir"
 Assert (@($included -like "*skipped.txt").Count -eq 0) "matchexcludepath anchored on the alias still excludes its folder"
+
+Remove-Item -LiteralPath $work -Recurse -Force
+
+# -----------------------------------------------------------------------------
+Write-Host "`n Case: real path in the exclusion log when a folder name contains the alias (alias Docs, folder MyDocs)"
+$work   = New-WorkDir
+$source = Join-Path $work "source"
+New-Item -ItemType Directory "$source\MyDocs\sub" -Force | Out-Null
+Set-Content -LiteralPath "$source\MyDocs\sub\f.txt" -Value "f"
+
+$BkType = "full"; $BkNoFollowJunctions = $False; $BkDryRun = $False; $matchcleanupfiles = $null; $matchexcludepath = '^Docs\\MyDocs\\sub$'
+$included = @(Invoke-Scan $work $source -aliasName "Docs")
+$excluded = @(Get-Content -LiteralPath "$work\Exclusions.txt")
+Assert (@($excluded | Where-Object { $_.EndsWith("`tmatchexcludepath`tD`t$source\MyDocs\sub") }).Count -eq 1) "excluded folder is logged with its real path [$($excluded -join ' | ')]"
 
 Remove-Item -LiteralPath $work -Recurse -Force
 
