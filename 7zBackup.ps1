@@ -306,6 +306,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     Remove-Junction had a broken Start-Sleep call
 #                                             Bug   : Logged real paths were wrong when a folder name contained the alias, and the
 #                                                     nofollowjunctions log named the parent instead of the skipped junction
+#                                             Bug   : Scan counted one folder too many (extra call without a folder) and the empty
+#                                                     Compress-Detail.txt was added to the archive (misspelled name filter)
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -2445,7 +2447,7 @@ $BkSources.GetEnumerator() | ForEach-Object {
 While ($True) {
 	If(Check-CTRLCRequest) {break}
 	ProcessFolder $catalogFolders[$catalogFoldersIndex] | Out-Null
-	If (!(++$catalogFoldersIndex -le $catalogFolders.Count)) {Write-Progress -Activity "." -Status "." -Completed; break}
+	If (!(++$catalogFoldersIndex -lt $catalogFolders.Count)) {Write-Progress -Activity "." -Status "." -Completed; break}
 }
 If($MyContext.Cancelling) {
 	If(!($MyContext.Cancelling)) { Do-PostAction; Send-Notification }
@@ -2459,7 +2461,7 @@ If($Counters.FilesSelected -gt 0) {
 		if(	
 			($_.Name -notmatch "stats") -And
 			($_.Name -notmatch "README") -And
-			($_.Name -notmatch "^Compress-Details.txt")
+			($_.Name -notmatch "^Compress-Detail\.txt$")
 		) {
 			$Counters.FilesSelected++ ; 
 			$Counters.BytesSelected += $_.Length ;

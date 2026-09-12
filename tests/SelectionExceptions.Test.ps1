@@ -68,6 +68,9 @@ foreach ($withDenied in $True, $False) {
 		Assert ($exceptionLines.Count -eq 0)                             "no exception is written"
 		Assert (!$log.Contains("Exceptions during selection process"))   "no exceptions section in the log"
 		Assert ($Counters.Warnings -eq 0)                                "no warning is counted"
+		Assert ($Counters.FoldersDone -eq 2)                             "each folder is counted once, Docs and MyDocs [$($Counters.FoldersDone)]"
+		$catalog = @(Get-Content -LiteralPath (Join-Path $BkRootDir "Catalog-Include.txt") -Encoding UTF8)
+		Assert (!($catalog -contains "Compress-Detail.txt"))             "the 7-Zip output file is not added to the archive catalog"
 	}
 
 	cmd /c "rd `"$BkRootDir\Docs`""
