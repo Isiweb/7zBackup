@@ -323,6 +323,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                             Code  : PostArchiving removed BkCompressDetailItems from the wrong scope (had no effect)
 #                                             Feat  : Selected items missing from the archive and not reported by 7-Zip are now
 #                                                     logged as NOT ARCHIVED warnings, for every backup type
+#                                             Bug   : Clearing the Archive bit failed on files with other attributes (e.g. OneDrive,
+#                                                     issue #13) and silently did nothing on names with square brackets
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -956,10 +958,9 @@ Function PostArchiving {
 			} Else {
 				If(($item.Attributes -band $archiveAttr)) {
 
-					$item = Set-ItemProperty -Path $item.FullName -Name Attributes -Value ($item.Attributes -bXOR $archiveAttr) -Force -PassThru
-					If(!($?)) {
-						Trace (" FAILED : {0}" -f $entry.File ); $Counters.Warnings++
-					}
+					# Not Set-ItemProperty: it rejects attributes like those of OneDrive files and reads [ ] in names as wildcards
+					Try { $item.Attributes = $item.Attributes -bXOR $archiveAttr }
+					Catch { Trace (" FAILED : {0}" -f $entry.File ); $Counters.Warnings++ }
 				}
 			}
 		} Else {
