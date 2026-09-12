@@ -314,6 +314,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     regexes used =* (zero or more =)
 #                                             Bug   : Size and age checks never ran: invalid maxfilesize, minfilesize, maxfileage and
 #                                                     minfileage values were silently ignored. Now they stop the job with an error
+#                                             Bug   : A size or age value of 0 stayed set (removal missed the script scope): the
+#                                                     log listed a 0 bytes or 0 days filter that did nothing
 #                                             Code  : Help for --clearbit said FULL or DIFF clear the Archive attribute: FULL or INCR
 #                                             Code  : Removed unused functions Clear-FsAttribute and Pause and other dead code
 
@@ -1731,8 +1733,8 @@ Function Validate-Variables {
 		}
 		Remove-Variable -Name "i"
 	}
-	If((Test-Variable "BkMaxFileSize") -And !($BkMaxFileSize -gt 0)) { Remove-Variable -Name "BkMaxFileSize" }
-	If((Test-Variable "BkMinFileSize") -And !($BkMinFileSize -gt 0)) { Remove-Variable -Name "BkMinFileSize" }
+	If((Test-Variable "BkMaxFileSize") -And !($BkMaxFileSize -gt 0)) { Remove-Variable -Name "BkMaxFileSize" -Scope Script }
+	If((Test-Variable "BkMinFileSize") -And !($BkMinFileSize -gt 0)) { Remove-Variable -Name "BkMinFileSize" -Scope Script }
 
 	If (Test-Variable "BkMaxFileAge") {
 		Set-Variable -Name "d" -Value ([double]0) -Scope Local
@@ -1754,8 +1756,8 @@ Function Validate-Variables {
 		Remove-Variable -Name "d"
 	}
 	
-	If((Test-Variable "BkMaxFileAge") -And !($BkMaxFileAge -gt 0)) { Remove-Variable -Name "BkMaxFileAge" }
-	If((Test-Variable "BkMinFileAge") -And !($BkMinFileAge -gt 0)) { Remove-Variable -Name "BkMinFileAge" }
+	If((Test-Variable "BkMaxFileAge") -And !($BkMaxFileAge -gt 0)) { Remove-Variable -Name "BkMaxFileAge" -Scope Script }
+	If((Test-Variable "BkMinFileAge") -And !($BkMinFileAge -gt 0)) { Remove-Variable -Name "BkMinFileAge" -Scope Script }
 	
 	
 	# --------------------------------------------------------------------------------------------------------------------------

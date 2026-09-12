@@ -58,6 +58,13 @@ Assert (($errors.Count -eq 0) -and ($BkMaxFileAge -is [double]) -and ($BkMaxFile
 $errors = @(Get-Errors "BkMinFileAge" "1.5")
 Assert (($errors.Count -eq 0) -and ($BkMinFileAge -is [double]) -and ($BkMinFileAge -eq 1.5))      "minfileage 1.5 becomes a number [$($errors -join ' | ')] [$($BkMinFileAge.GetType().Name)]"
 
+Write-Host "`n Case: zero turns the filter off"
+# The setting must be removed, not left at 0 (the log would list a filter that does nothing)
+foreach ($variable in "BkMaxFileSize", "BkMinFileSize", "BkMaxFileAge", "BkMinFileAge") {
+	$errors = @(Get-Errors $variable "0")
+	Assert (($errors.Count -eq 0) -and !(Test-Variable $variable)) "$variable 0 is removed [$($errors -join ' | ')]"
+}
+
 Remove-Item -LiteralPath $work -Recurse -Force
 
 Write-Host ""
