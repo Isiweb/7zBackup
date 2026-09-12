@@ -321,6 +321,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                             Code  : Help for --clearbit said FULL or DIFF clear the Archive attribute: FULL or INCR
 #                                             Code  : Removed unused functions Clear-FsAttribute and Pause and other dead code
 #                                             Code  : PostArchiving removed BkCompressDetailItems from the wrong scope (had no effect)
+#                                             Feat  : Selected items missing from the archive and not reported by 7-Zip are now
+#                                                     logged as NOT ARCHIVED warnings, for every backup type
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -866,7 +868,6 @@ Function PostArchiving {
 	}
 	If(
 		(Check-CTRLCRequest) -Or
-		(($BkType -ne "move") -And !($BkClearBit)) -Or
 		($BkDryRun)
 	) { Return; }
 
@@ -908,6 +909,19 @@ Function PostArchiving {
 		Return
 	}
 	Set-Variable -Name "BkCompressDetailItems" -Value $archivedItems -Scope Script
+
+	# Selected items not in the archive. Items 7-Zip reported while adding ($warningItems, filled by
+	# the caller) are already logged with their reason: only silent misses are listed here
+	$archivedPaths = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+	foreach ($entry in $archivedItems) { [void]$archivedPaths.Add($entry.File) }
+	$notArchived = @(Get-Content $BkCatalogInclude -Encoding UTF8 | Where-Object { !$archivedPaths.Contains($_) -and !($warningItems -and $warningItems[$_]) })
+	If($notArchived.Count -gt 0) {
+		Trace " Selected items not in archive"
+		Trace " ------------------------------------------------------------------------------"
+		$notArchived | ForEach-Object { Trace " NOT ARCHIVED : $_"; $Counters.Warnings++ }
+		Trace " "
+	}
+	If(($BkType -ne "move") -And !($BkClearBit)) { Return }
 	
 	If( !($BkCompressDetailItems) -Or
 	    ($BkCompressDetailItems.Count -eq 0) -Or
