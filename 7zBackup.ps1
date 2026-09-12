@@ -300,6 +300,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     it now goes to 7-Zip input. 7-Zip console charset is UTF-8
 #                                             Bug   : Archive prefix accepted path separators (e.g. ..\x): the archive could be
 #                                                     written outside the destination path. Now rejected
+#                                             Bug   : Post archive statistics: files/sec was always 0 (undefined variable) and the
+#                                                     progress percent went over 100, hiding the progress bar
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -932,7 +934,7 @@ Function PostArchiving {
 	Set-Variable -Name "ArchivedItemsCount" -Value ($BkCompressDetailItems.Count) -Scope Local
 	Set-Variable -Name "ItemsBatchSize" -Value ($ArchivedItemsCount / 100) -Scope Local
 	Set-Variable -Name "ItemsCountDown" -Value ($ItemsBatchSize) -Scope Local
-	Set-Variable -Name "ItemsPercent" -Value 0 -Scope Local
+	Set-Variable -Name "ItemsDone" -Value 0 -Scope Local
 	
 	If($BkType -eq "move") {
 		Set-Variable -Name "OperationType" -Value "Removing" -Scope Local
@@ -965,11 +967,11 @@ Function PostArchiving {
 			Write-Host " ? " + (Join-Path $BkRootDir $entry.File)
 		}
 		
+		$ItemsDone++
 		$ItemsCountDown--
 		If($ItemsCountDown -le 0) {
-			$ItemsPercent++
 			$ItemsCountDown = $ItemsBatchSize
-			Write-Progress -Activity  "Performing post archive operations" -Status "Please wait ..." -CurrentOperation ("{0} successfully archived files" -f $OperationType)  -PercentComplete ($ItemsPercent * 100)
+			Write-Progress -Activity  "Performing post archive operations" -Status "Please wait ..." -CurrentOperation ("{0} successfully archived files" -f $OperationType)  -PercentComplete ([int]($ItemsDone * 100 / $ArchivedItemsCount))
 		}
 	}
 	
@@ -977,7 +979,7 @@ Function PostArchiving {
 	$MyContext.PostProcessFilesEnd = Get-Date
 	$MyContext.PostProcessFilesElapsed = New-TimeSpan $MyContext.PostProcessFilesStart $MyContext.PostProcessFilesEnd
 	Trace (" Phase time   : {0,0:n0} d : {1,0:n0} h : {2,0:n0} m : {3,0:n3} s" -f $MyContext.PostProcessFilesElapsed.Days, $MyContext.PostProcessFilesElapsed.Hours, $MyContext.PostProcessFilesElapsed.Minutes, ($MyContext.PostProcessFilesElapsed.Seconds + ($MyContext.PostProcessFilesElapsed.MilliSeconds/1000)) )
-	Trace (" Performance  : {0,0:n2} files/sec`n" -f ($i / $MyContext.PostProcessFilesElapsed.TotalSeconds ) )
+	Trace (" Performance  : {0,0:n2} files/sec`n" -f ($ItemsDone / $MyContext.PostProcessFilesElapsed.TotalSeconds ) )
 	
 }
 

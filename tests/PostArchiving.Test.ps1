@@ -73,7 +73,14 @@ Function Invoke-Case {
 
 	If($corruptArchive) { Set-Content -LiteralPath $script:BkDestFile -Value "not an archive" }
 
+	$Error.Clear()
 	PostArchiving
+
+	If(!$corruptArchive) {
+		$performance = [regex]::Match($script:MyContext.Logger.ToString(), 'Performance\s+:\s+([0-9.,]+) files/sec').Groups[1].Value
+		Assert ($performance -match '[1-9]')                                          "${label}: performance line shows a non-zero files/sec [$performance]"
+		Assert (@($Error | Where-Object { "$_" -match 'PercentComplete' }).Count -eq 0) "${label}: progress percent stays within 0-100"
+	}
 
 	$locked = Join-Path $alias "locked.txt"
 	If($corruptArchive) {
