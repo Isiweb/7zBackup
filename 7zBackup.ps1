@@ -271,6 +271,8 @@ $version = "2.1.2-Stable"  # 20180322 Anlan   Feat  : Adjusted clear archive bit
 $version = "2.1.3-Stable"  # 20200514 Anlan   Code  : Enclosed [console]::TreatControlCAsInput in Try Catch block
 #                                                     as it may throw is console is launched with stdin redirection
 $version = "2.1.4-Stable"  # 20200824 Anlan   Code  : Speed up PostArchiving a little bit using a range iterator
+$version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit acted also on files 7-Zip failed to store
+#                                                     Processed items are now read from the finished archive
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -853,13 +855,36 @@ Function PostArchiving {
 		($BkDryRun)
 	) { Return; }
 
-	# Load compress details data with respect of different log formats for different 7zip versions
+	# Take the processed items from the finished archive, not from the "+ file"
+	# lines 7-Zip prints while adding: a file 7-Zip fails to open (e.g. locked)
+	# still gets a "+" line, but it is not stored in the archive
 	If(Test-Variable "BkCompressDetailItems") { Remove-Variable -Name BkCompressDetailItems}
-	If ([int]$MyContext.SevenZBinVersionInfo.Major -gt 9) {	
-		Get-Content -Path $BkCompressDetail -Encoding UTF8 | Where-Object {$_ -match "^\+"} | Select @{Name="File";Expression={($_.Substring(2))}} | Set-Variable -Name "BkCompressDetailItems" -Scope Script
-	} Else {
-		Get-Content -Path $BkCompressDetail -Encoding UTF8 | Where-Object {$_ -match "^Compressing\ \ "} | Select @{Name="File";Expression={($_.Substring(13))}} | Set-Variable -Name "BkCompressDetailItems" -Scope Script
+	$archiveToList = $BkDestFile
+	If(!(Test-Path -LiteralPath $archiveToList -PathType Leaf)) { $archiveToList = "$BkDestFile.001" }
+	$oListStartInfo = New-Object -TypeName System.Diagnostics.ProcessStartInfo
+	$oListStartInfo.FileName = $Bk7ZipBin
+	$oListStartInfo.Arguments = "l -slt -sccUTF-8 `"$archiveToList`""
+	If(Test-Variable "BkArchivePassword") { $oListStartInfo.Arguments += " -p$BkArchivePassword" }
+	$oListStartInfo.RedirectStandardOutput = $True
+	$oListStartInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+	$oListStartInfo.UseShellExecute = $False
+	$oListStartInfo.CreateNoWindow = $True
+	$oListProcess = [System.Diagnostics.Process]::Start($oListStartInfo)
+	# Read line by line: -slt prints about ten lines per item, too much for a single string
+	# Entries follow the "----------" line. The "Path = " line above it is the archive itself
+	$archivedItems = New-Object System.Collections.ArrayList
+	$listingEntries = $False
+	While($null -ne ($listLine = $oListProcess.StandardOutput.ReadLine())) {
+		If($listLine -eq "----------") { $listingEntries = $True }
+		ElseIf($listingEntries -and $listLine.StartsWith("Path = ")) { [void]$archivedItems.Add((New-Object PSObject -Property @{ File = $listLine.Substring(7) })) }
 	}
+	$oListProcess.WaitForExit()
+	If($oListProcess.ExitCode -ne 0) {
+		Trace (" WARNING : Could not list archive {0}. Post archive operations skipped`n" -f $archiveToList)
+		$Counters.Warnings++
+		Return
+	}
+	Set-Variable -Name "BkCompressDetailItems" -Value $archivedItems -Scope Script
 	
 	If( !($BkCompressDetailItems) -Or
 	    ($BkCompressDetailItems.Count -eq 0) -Or
