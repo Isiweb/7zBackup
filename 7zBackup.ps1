@@ -302,6 +302,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     written outside the destination path. Now rejected
 #                                             Bug   : Post archive statistics: files/sec was always 0 (undefined variable) and the
 #                                                     progress percent went over 100, hiding the progress bar
+#                                             Bug   : Pre-Vista junctions: Make-Junction passed an undefined target and
+#                                                     Remove-Junction had a broken Start-Sleep call
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -788,7 +790,7 @@ Function Make-Junction {
 	If(Test-Path -Path $jTarget) {
 	
 		# Junction it (from alias)
-		Invoke-Expression (('& "{0}" /accepteula "{1}" "{2}"') -f $BkJunctionBin, $jPath, $Target) 
+		Invoke-Expression (('& "{0}" /accepteula "{1}" "{2}"') -f $BkJunctionBin, $jPath, $jTarget) 
 		Start-Sleep -Milliseconds 10
 		
 		# Test is present
@@ -1208,7 +1210,7 @@ Function Remove-Junction  {
 
 		# UnJunction it
 		Invoke-Expression (('& "{0}" /accepteula -d "{1}"') -f $BkJunctionBin, $jPath) 
-		Start-Sleep --Milliseconds 10
+		Start-Sleep -Milliseconds 10
 		
 		# Test is no more present !!
 		Write-Output ((Test-Path -Path $jPath) -eq $False)
