@@ -298,6 +298,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                             Bug   : A failed notification email showed an empty reason: now the underlying error
 #                                             Sec   : The archive password was visible in the process list and verbose output:
 #                                                     it now goes to 7-Zip input. 7-Zip console charset is UTF-8
+#                                             Bug   : Archive prefix accepted path separators (e.g. ..\x): the archive could be
+#                                                     written outside the destination path. Now rejected
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1807,7 +1809,7 @@ Function Validate-Variables {
 	If(
 		!(Test-Variable "BkArchivePrefix") -Or
 		($BkArchivePrefix -match "^\s*$") -Or
-		!(Test-Path -Path $BkArchivePrefix -IsValid)
+		(([string]$BkArchivePrefix).IndexOfAny([System.IO.Path]::GetInvalidFileNameChars()) -ge 0)
 	) { Write-Output "Missing or invalid --prefix argument" }
 
 	# --------------------------------------------------------------------------------------------------------------------------
