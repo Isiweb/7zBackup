@@ -312,6 +312,7 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     command line error printed an undefined variable instead of the arguments
 #                                             Bug   : Directive names matched longer names (prefixes=, includesourcex=, ...): the
 #                                                     regexes used =* (zero or more =)
+#                                             Code  : Help for --clearbit said FULL or DIFF clear the Archive attribute: FULL or INCR
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -478,7 +479,7 @@ $helpText = @"
                positive integers. It can be specified either as command argument
                or in the hardcoded vars file, or in the selection file.
 
- --clearbit    In backup operations of type FULL or DIFF the Archive attribute
+ --clearbit    In backup operations of type FULL or INCR the Archive attribute
                of backupped files is cleared. If you do not want the script
                to do this simply pass --clearbit False. On the other hand
                if you do want to clear the attribute even in other backup
