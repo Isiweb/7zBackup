@@ -277,6 +277,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     could be silently left out of the scan
 #                                             Bug   : Rotation could delete archives of other jobs sharing the prefix end
 #                                                     or renamed copies. Archive name regex is now anchored
+#                                             Bug   : matchcleanupfiles tested an undefined variable: cleanup never ran, or deleted
+#                                                     every file with a regex matching empty text. Cleaned files were archived
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1059,7 +1061,7 @@ Function ProcessFolder ($thisFolder) {
 				$childFileRealName = Join-Path -Path $thisFolder.RealName -ChildPath $childFile.Name
 
 				# >>> Clean up files ?
-				If(($matchcleanupfiles) -and ($childFileName -match $matchcleanupfiles)) {
+				If(($matchcleanupfiles) -and ($childFile.Name -match $matchcleanupfiles)) {
 					If(!$BkDryRun) {
 						Trace (" Removing F {0} " -f $childFileRealName)
 						$childFile | Remove-Item -Force -ErrorVariable childFileRemoveError | Out-Null
@@ -1071,6 +1073,8 @@ Function ProcessFolder ($thisFolder) {
 					} Else {
 						Trace (" Would remove {0} " -f $childFileRealName)
 					}
+					# A cleaned up file must never be selected for the archive
+					continue
 				}
 				# <<<
 

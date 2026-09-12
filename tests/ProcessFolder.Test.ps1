@@ -1,6 +1,4 @@
-# Integration test for ProcessFolder.
-# With nofollowjunctions, a skipped junction must not make the scan lose
-# the folders enumerated after it.
+# Integration tests for ProcessFolder (selection scan).
 #
 # Usage: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\ProcessFolder.Test.ps1
 
@@ -19,51 +17,85 @@ Function Assert ([bool]$condition, [string]$message) {
 	Else { Write-Host " FAIL : $message" -ForegroundColor Red; $script:Failures++ }
 }
 
+Function New-WorkDir {
+	$work = Join-Path $env:TEMP ("7zb-test-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
+	New-Item -ItemType Directory $work -Force | Out-Null
+	Write-Output $work
+}
+
+# Scans $source aliased as "Alias" the way the 7zBackup.ps1 script body does.
+# Returns the lines written to the inclusion catalog.
+Function Invoke-Scan ([string]$work, [string]$source) {
+	$script:BkRootDir = Join-Path $work "root"
+	New-Item -ItemType Directory $script:BkRootDir -Force | Out-Null
+	# 7zBackup.ps1 links each source into the root dir: a junction does the same without admin rights
+	cmd /c "mklink /J `"$script:BkRootDir\Alias`" `"$source`"" | Out-Null
+
+	$script:BkSources = @{ Alias = $source }
+	$script:Counters  = @{ Exclusions = 0; Exceptions = 0; FoldersDone = 0; FilesProcessed = 0; FilesSelected = 0; BytesSelected = [int64]0; PlaceHolders = @() }
+	$script:MyContext = [hashtable]::Synchronized(@{ Cancelling = $False; Logger = (New-Object System.Text.StringBuilder); SelectionStart = (Get-Date) })
+	$inclusions       = Join-Path $work "Catalog-Include.txt"
+	$script:SWriters  = @{ Inclusions = (New-Object System.IO.StreamWriter($inclusions, $False, [System.Text.Encoding]::UTF8)) }
+	foreach ($name in "Exclusions", "Exceptions", "Stats") { $script:SWriters[$name] = New-Object System.IO.StreamWriter((Join-Path $work "$name.txt"), $False, [System.Text.Encoding]::ASCII) }
+
+	$script:catalogFolders      = New-Object System.Collections.ArrayList
+	$script:catalogFoldersIndex = 0
+	[void]$script:catalogFolders.Add(@{ Name = "Alias"; FullName = "$script:BkRootDir\Alias"; RelativeName = "Alias"; ContainerAlias = "Alias"; RealName = $source; Depth = 0 })
+	Set-Location -Path $script:BkRootDir
+	While ($True) {
+		If(Check-CTRLCRequest) {break}
+		ProcessFolder $script:catalogFolders[$script:catalogFoldersIndex] | Out-Null
+		If (!(++$script:catalogFoldersIndex -le $script:catalogFolders.Count)) {break}
+	}
+	Set-Location -Path $env:TEMP
+	$script:SWriters.Values | ForEach-Object { $_.Close() }
+	cmd /c "rd `"$script:BkRootDir\Alias`""
+	Write-Output @(Get-Content -LiteralPath $inclusions -Encoding UTF8)
+}
+
+# -----------------------------------------------------------------------------
+Write-Host "`n Case: nofollowjunctions must not drop folders enumerated after a skipped junction"
+$work   = New-WorkDir
+$source = Join-Path $work "source"
 # source\Parent holds AJunction (enumerated first, points outside), B and C
-$work      = Join-Path $env:TEMP ("7zb-test-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
-$source    = Join-Path $work "source"
-$BkRootDir = Join-Path $work "root"
-New-Item -ItemType Directory "$source\Parent\B", "$source\Parent\C", "$work\elsewhere", $BkRootDir -Force | Out-Null
+New-Item -ItemType Directory "$source\Parent\B", "$source\Parent\C", "$work\elsewhere" -Force | Out-Null
 Set-Content -LiteralPath "$source\Parent\B\b.txt" -Value "b"
 Set-Content -LiteralPath "$source\Parent\C\c.txt" -Value "c"
 Set-Content -LiteralPath "$work\elsewhere\e.txt" -Value "e"
 cmd /c "mklink /J `"$source\Parent\AJunction`" `"$work\elsewhere`"" | Out-Null
-# 7zBackup.ps1 links each source into the root dir: a junction does the same without admin rights
-cmd /c "mklink /J `"$BkRootDir\Alias`" `"$source`"" | Out-Null
 Assert ([int]((Get-Item -LiteralPath "$source\Parent\AJunction" -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) "precondition, AJunction is a junction"
 
-# State ProcessFolder reads from script scope
-$BkType              = "full"
-$BkNoFollowJunctions = $True
-$BkSources           = @{ Alias = $source }
-$Counters            = @{ Exclusions = 0; Exceptions = 0; FoldersDone = 0; FilesProcessed = 0; FilesSelected = 0; BytesSelected = [int64]0; PlaceHolders = @() }
-$MyContext           = [hashtable]::Synchronized(@{ Cancelling = $False; Logger = (New-Object System.Text.StringBuilder); SelectionStart = (Get-Date) })
-$inclusions          = Join-Path $work "Catalog-Include.txt"
-$SWriters            = @{ Inclusions = (New-Object System.IO.StreamWriter($inclusions, $False, [System.Text.Encoding]::UTF8)) }
-foreach ($name in "Exclusions", "Exceptions", "Stats") { $SWriters[$name] = New-Object System.IO.StreamWriter((Join-Path $work "$name.txt"), $False, [System.Text.Encoding]::ASCII) }
+$BkType = "full"; $BkNoFollowJunctions = $True; $BkDryRun = $False; $matchcleanupfiles = $null
+$included = @(Invoke-Scan $work $source)
+Assert ($included -contains "Alias\Parent\B\b.txt") "file in B (after the skipped junction) is selected"
+Assert ($included -contains "Alias\Parent\C\c.txt") "file in C (after the skipped junction) is selected"
+Assert (@($included -like "*e.txt").Count -eq 0)    "file behind the skipped junction is not selected"
 
-# Queue and scan loop as in the 7zBackup.ps1 script body
-$catalogFolders      = New-Object System.Collections.ArrayList
-$catalogFoldersIndex = 0
-[void]$catalogFolders.Add(@{ Name = "Alias"; FullName = "$BkRootDir\Alias"; RelativeName = "Alias"; ContainerAlias = "Alias"; RealName = $source; Depth = 0 })
-Set-Location -Path $BkRootDir
-While ($True) {
-	If(Check-CTRLCRequest) {break}
-	ProcessFolder $catalogFolders[$catalogFoldersIndex] | Out-Null
-	If (!(++$catalogFoldersIndex -le $catalogFolders.Count)) {break}
-}
-Set-Location -Path $env:TEMP
-$SWriters.Values | ForEach-Object { $_.Close() }
-
-$included = @(Get-Content -LiteralPath $inclusions -Encoding UTF8)
-Assert ($included -contains "Alias\Parent\B\b.txt")    "file in B (after the skipped junction) is selected"
-Assert ($included -contains "Alias\Parent\C\c.txt")    "file in C (after the skipped junction) is selected"
-Assert (@($included -like "*e.txt").Count -eq 0)       "file behind the skipped junction is not selected"
-
-# Remove junctions first, then the rest
-cmd /c "rd `"$BkRootDir\Alias`""
 cmd /c "rd `"$source\Parent\AJunction`""
 Remove-Item -LiteralPath $work -Recurse -Force
+
+# -----------------------------------------------------------------------------
+foreach ($dryRun in $False, $True) {
+	Write-Host "`n Case: matchcleanupfiles (dry run = $dryRun)"
+	$work   = New-WorkDir
+	$source = Join-Path $work "source"
+	New-Item -ItemType Directory $source -Force | Out-Null
+	Set-Content -LiteralPath "$source\junk.tmp" -Value "junk"
+	Set-Content -LiteralPath "$source\keep.txt" -Value "keep"
+
+	$BkType = "full"; $BkNoFollowJunctions = $False; $BkDryRun = $dryRun; $matchcleanupfiles = '\.tmp$'
+	$included = @(Invoke-Scan $work $source)
+	If($dryRun) {
+		Assert (Test-Path -LiteralPath "$source\junk.tmp")  "dry run: matching file stays on disk"
+	} Else {
+		Assert (!(Test-Path -LiteralPath "$source\junk.tmp")) "matching file is deleted from source"
+	}
+	Assert (!($included -contains "Alias\junk.tmp"))  "matching file is not selected for the archive"
+	Assert (Test-Path -LiteralPath "$source\keep.txt") "other file stays on disk"
+	Assert ($included -contains "Alias\keep.txt")      "other file is selected"
+
+	Remove-Item -LiteralPath $work -Recurse -Force
+}
 
 Write-Host ""
 If($Failures -gt 0) { Write-Host " $Failures assertion(s) failed" -ForegroundColor Red; exit 1 }
