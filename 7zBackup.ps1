@@ -313,6 +313,7 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                             Bug   : Directive names matched longer names (prefixes=, includesourcex=, ...): the
 #                                                     regexes used =* (zero or more =)
 #                                             Code  : Help for --clearbit said FULL or DIFF clear the Archive attribute: FULL or INCR
+#                                             Code  : Removed unused functions Clear-FsAttribute and Pause and other dead code
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -649,39 +650,6 @@ Function Check-FsAttribute {
 } 
 
 # -----------------------------------------------------------------------------
-# Function 		: Clear-FsAttribute
-# -----------------------------------------------------------------------------
-# Description	: Lowers an attribute on a file
-# Parameters    : [string]fileFullName - The name of the File to work on
-#				  [string]attrName - The name of the attribute to lower
-# Returns       : $True / $False
-# Credits       : http://scriptolog.blogspot.com/2007/10/file-attributes-helper-functions.html
-# -----------------------------------------------------------------------------
-Function Clear-FsAttribute {
-    param([string]$fileFullName = $(throw "You must provide a file name"),
-	      [string]$attrName = $(throw "You must provide an attribute name"))
-
-	# Do Nothing in DryRun mode
-	If($BkDryRun) { Write-Output $True; Return }
-	
-	# Lower attribute bit
-	# TO-DO ... extremely slow
-	
-	$item = (Get-Item -LiteralPath $fileFullName -Force)
-	If(!($?)) {
-		Write-Output $False
-	} Else {
-		If(($item.Attributes -band [System.IO.FileAttributes]::$attrName)) {
-			$item = ( $item | Set-ItemProperty -Name Attributes -Value ($item.Attributes -bXor [System.IO.FileAttributes]::$attrName) -Force -PassThru)
-			Write-Output (($?) -and ($item)) 
-			Return
-		}
-		Write-Output $True
-	}
-	
-} 
-
-# -----------------------------------------------------------------------------
 # Function 		: Clear-Script
 # -----------------------------------------------------------------------------
 # Description	: Cleans all files created by the script and leaves the system
@@ -701,7 +669,6 @@ Function Clear-Script {
 	}
 
 	
-    If ((Test-Variable "cmdLineBatch")) {if ((Test-Path ($cmdLineBatch))) { Remove-Item -LiteralPath $cmdLineBatch | Out-Null }}
 	# Only the run that created the lock may remove it
 	If ((Test-Variable "BkLockFile") -and ($MyContext.LockOwned)) {if ((Test-Path ($BkLockFile))) { Remove-Item -LiteralPath $BkLockFile | Out-Null }}
 	Set-Location ($MyContext.StartDir)
@@ -1542,19 +1509,6 @@ Function Test-Variable {
 Function Trace ($message) {
 	Write-Host ($message) 
 	[void]$MyContext.Logger.AppendLine($message)
-}
-
-# -----------------------------------------------------------------------------
-# Function 		: Pause
-# -----------------------------------------------------------------------------
-# Description	: Outputs message to console and waits for any key
-# Parameters    : [string]$message  - The message to output
-# Returns       : --
-# -----------------------------------------------------------------------------
-Function Pause ($Message="`n Paused. Press any key to continue...`r") {
-	Write-Host -NoNewLine $Message
-	$Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
-	Write-Host "                                                          "
 }
 
 # -----------------------------------------------------------------------------
@@ -2455,7 +2409,6 @@ While ($True) {
 	If (!(++$catalogFoldersIndex -lt $catalogFolders.Count)) {Write-Progress -Activity "." -Status "." -Completed; break}
 }
 If($MyContext.Cancelling) {
-	If(!($MyContext.Cancelling)) { Do-PostAction; Send-Notification }
 	Clear-Script
 	Return 
 }
