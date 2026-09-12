@@ -338,6 +338,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                             Speed : Paths built once per file use [IO.Path]::Combine instead of Join-Path (90 to 3 us)
 #                                             Speed : PostArchiving deletes and clears files with .NET calls, not Get-Item / Remove-Item
 #                                                     (about 360 to 65 us per file), and keeps listing entries as plain strings
+#                                             Speed : File age filters subtract dates instead of calling New-Timespan per file, and the
+#                                                     NOT ARCHIVED check loops over the catalog instead of piping it
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -936,7 +938,8 @@ Function PostArchiving {
 	# the caller) are already logged with their reason: only silent misses are listed here
 	$archivedPaths = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
 	foreach ($entry in $archivedItems) { [void]$archivedPaths.Add($entry) }
-	$notArchived = @(Get-Content $BkCatalogInclude -Encoding UTF8 | Where-Object { !$archivedPaths.Contains($_) -and !($warningItems -and $warningItems[$_]) })
+	$notArchived = New-Object System.Collections.Generic.List[string]
+	foreach ($line in [System.IO.File]::ReadLines($BkCatalogInclude)) { If(!$archivedPaths.Contains($line) -and !($warningItems -and $warningItems[$line])) { $notArchived.Add($line) } }
 	If($notArchived.Count -gt 0) {
 		Trace " Selected items not in archive"
 		Trace " ------------------------------------------------------------------------------"
@@ -1156,13 +1159,13 @@ Function ProcessFolder ($thisFolder) {
 				}
 
 				# Check the file falls into MaxFileAge
-				If(($BkMaxFileAge) -and ((New-Timespan $childFile.LastWriteTime $MyContext.SelectionStart).TotalDays -gt $BkMaxFileAge) ) {
+				If(($BkMaxFileAge) -and (($MyContext.SelectionStart - $childFile.LastWriteTime).TotalDays -gt $BkMaxFileAge) ) {
 					$SWriters.Exclusions.WriteLine([string]("{0}`t{1}`t{2}`t{3}" -f $Counters.Exclusions++, "maxfileage", "F", $childFileRealName))
 					continue
 				}
 	
 				# Check the file falls into MinFileAge
-				If(($BkMinFileAge) -and ((New-Timespan $childFile.LastWriteTime $MyContext.SelectionStart).TotalDays -lt $BkMinFileAge) ) {
+				If(($BkMinFileAge) -and (($MyContext.SelectionStart - $childFile.LastWriteTime).TotalDays -lt $BkMinFileAge) ) {
 					$SWriters.Exclusions.WriteLine([string]("{0}`t{1}`t{2}`t{3}" -f $Counters.Exclusions++, "minfileage", "F", $childFileRealName))
 					continue
 				}

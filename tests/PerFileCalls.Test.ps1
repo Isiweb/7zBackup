@@ -32,6 +32,7 @@ Write-Host "`n Case: ProcessFolder, loop over the files of a folder"
 $commands = Get-LoopCommands "ProcessFolder" ([System.Management.Automation.Language.ForStatementAst]) '$childFiles.Count'
 Assert ($null -ne $commands)                                              "precondition, loop found"
 Assert (@($commands | Where-Object { $_ -eq "Join-Path" }).Count -eq 0)   "no Join-Path per file [$(($commands | Sort-Object -Unique) -join ', ')]"
+Assert (@($commands | Where-Object { $_ -eq "New-Timespan" }).Count -eq 0) "no New-Timespan per file [$(($commands | Sort-Object -Unique) -join ', ')]"
 
 Write-Host "`n Case: PostArchiving, loop over the archived items"
 $commands = Get-LoopCommands "PostArchiving" ([System.Management.Automation.Language.ForEachStatementAst]) '$BkCompressDetailItems'
@@ -43,6 +44,12 @@ Write-Host "`n Case: PostArchiving, loop over the archive listing lines"
 $commands = Get-LoopCommands "PostArchiving" ([System.Management.Automation.Language.WhileStatementAst]) 'StandardOutput.ReadLine()'
 Assert ($null -ne $commands)                                              "precondition, loop found"
 Assert (@($commands | Where-Object { $_ -eq "New-Object" }).Count -eq 0)  "no New-Object per listing line [$(($commands | Sort-Object -Unique) -join ', ')]"
+
+Write-Host "`n Case: PostArchiving, catalog check (NOT ARCHIVED)"
+$assignments = @((Get-Function "PostArchiving").FindAll({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$notArchived' }, $True))
+$commands = @($assignments | ForEach-Object { $_.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $True) } | ForEach-Object { $_.GetCommandName() })
+Assert ($assignments.Count -ge 1)                                         "precondition, notArchived assignment found"
+Assert (@($commands | Where-Object { $_ -eq "Where-Object" }).Count -eq 0) "no Where-Object pipeline over the catalog [$(($commands | Sort-Object -Unique) -join ', ')]"
 
 Write-Host ""
 If($Failures -gt 0) { Write-Host " $Failures assertion(s) failed" -ForegroundColor Red; exit 1 }

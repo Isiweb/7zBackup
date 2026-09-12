@@ -132,6 +132,28 @@ Assert (@($excluded | Where-Object { $_.EndsWith("`tmatchexcludepath`tD`t$source
 
 Remove-Item -LiteralPath $work -Recurse -Force
 
+# -----------------------------------------------------------------------------
+foreach ($filter in "maxfileage", "minfileage") {
+	Write-Host "`n Case: $filter 5 with a 10 days old file and a new file"
+	$work   = New-WorkDir
+	$source = Join-Path $work "source"
+	New-Item -ItemType Directory $source -Force | Out-Null
+	Set-Content -LiteralPath "$source\old.txt" -Value "old"
+	Set-Content -LiteralPath "$source\new.txt" -Value "new"
+	(Get-Item -LiteralPath "$source\old.txt").LastWriteTime = (Get-Date).AddDays(-10)
+
+	$BkType = "full"; $BkNoFollowJunctions = $False; $BkDryRun = $False; $matchcleanupfiles = $null; $matchexcludepath = $null
+	$BkMaxFileAge = $null; $BkMinFileAge = $null
+	If($filter -eq "maxfileage") { $BkMaxFileAge = 5; $kept = "new.txt"; $dropped = "old.txt" } Else { $BkMinFileAge = 5; $kept = "old.txt"; $dropped = "new.txt" }
+	$included = @(Invoke-Scan $work $source)
+	$excluded = @(Get-Content -LiteralPath "$work\Exclusions.txt")
+	Assert (($included -contains "Alias\$kept") -and !($included -contains "Alias\$dropped")) "${filter}: $kept is selected, $dropped is not [$($included -join ', ')]"
+	Assert (@($excluded | Where-Object { $_.EndsWith("`t$filter`tF`t$source\$dropped") }).Count -eq 1) "${filter}: the exclusion log names $dropped [$($excluded -join ' | ')]"
+
+	$BkMaxFileAge = $null; $BkMinFileAge = $null
+	Remove-Item -LiteralPath $work -Recurse -Force
+}
+
 Write-Host ""
 If($Failures -gt 0) { Write-Host " $Failures assertion(s) failed" -ForegroundColor Red; exit 1 }
 Write-Host " All assertions passed" -ForegroundColor Green
