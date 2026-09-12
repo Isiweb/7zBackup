@@ -320,6 +320,7 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     could authenticate with a blank password
 #                                             Code  : Help for --clearbit said FULL or DIFF clear the Archive attribute: FULL or INCR
 #                                             Code  : Removed unused functions Clear-FsAttribute and Pause and other dead code
+#                                             Code  : PostArchiving removed BkCompressDetailItems from the wrong scope (had no effect)
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -872,7 +873,7 @@ Function PostArchiving {
 	# Take the processed items from the finished archive, not from the "+ file"
 	# lines 7-Zip prints while adding: a file 7-Zip fails to open (e.g. locked)
 	# still gets a "+" line, but it is not stored in the archive
-	If(Test-Variable "BkCompressDetailItems") { Remove-Variable -Name BkCompressDetailItems}
+	If(Test-Variable "BkCompressDetailItems") { Remove-Variable -Name BkCompressDetailItems -Scope Script}
 	$archiveToList = $BkDestFile
 	If(!(Test-Path -LiteralPath $archiveToList -PathType Leaf)) { $archiveToList = "$BkDestFile.001" }
 	$oListStartInfo = New-Object -TypeName System.Diagnostics.ProcessStartInfo
