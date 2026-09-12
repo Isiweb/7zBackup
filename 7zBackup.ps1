@@ -345,6 +345,7 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                             Bug   : 7-Zip output was read by PowerShell events: lines came out of order, stderr lines
 #                                                     were joined into one and lines still queued when 7-Zip exited were lost
 #                                             Speed : Folders are listed with DirectoryInfo instead of Get-ChildItem (about 27 to 1 us per item)
+#                                             Code  : Get-CimInstance instead of Get-WmiObject, which PowerShell 7 does not have
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -381,7 +382,7 @@ $MyContext.Name       = $MyInvocation.MyCommand.Name
 $MyContext.Definition = $MyInvocation.MyCommand.Definition
 $MyContext.Directory  = (Split-Path (Resolve-Path $MyInvocation.MyCommand.Definition) -Parent)
 $MyContext.StartDir   = (Get-Location -PSProvider FileSystem).ProviderPath
-$MyContext.WinVer     = (Get-WmiObject Win32_OperatingSystem).Version.Split(".")
+$MyContext.WinVer     = (Get-CimInstance -ClassName Win32_OperatingSystem).Version.Split(".")
 $MyContext.PSVer      = [int]$PSVersionTable.PSVersion.Major
 $MyContext.Cancelling = $False
 $MyContext.DummyFile  = ".7zb"
@@ -2019,7 +2020,7 @@ Function Validate-Variables {
 			Set-Variable -Name "tmpNumCores" -Value([int]0) -Scope Local
 			
 			# Check number of threads does not exceed number of available (logical) cores
-			Get-WmiObject -class win32_processor | ForEach-Object {
+			Get-CimInstance -ClassName Win32_Processor | ForEach-Object {
 				If($_.NumberOfLogicalProcessors) {
 					$tmpNumCores += [int]$_.NumberOfLogicalProcessors
 				} 
