@@ -316,6 +316,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     minfileage values were silently ignored. Now they stop the job with an error
 #                                             Bug   : A size or age value of 0 stayed set (removal missed the script scope): the
 #                                                     log listed a 0 bytes or 0 days filter that did nothing
+#                                             Bug   : An invalid smtpuser / smtppass pair was reported but kept: the error email
+#                                                     could authenticate with a blank password
 #                                             Code  : Help for --clearbit said FULL or DIFF clear the Archive attribute: FULL or INCR
 #                                             Code  : Removed unused functions Clear-FsAttribute and Pause and other dead code
 
@@ -2002,8 +2004,8 @@ Function Validate-Variables {
 				($BkSmtpPass -match "^\s*$")
 			) { 
 				Write-Output "Missing or invalid --smtpuser or --smtppass argument" 
-				Remove-Variable -Name BkSmtpUser
-				Remove-Variable -Name BkSmtpPass
+				Remove-Variable -Name BkSmtpUser -Scope Script
+				Remove-Variable -Name BkSmtpPass -Scope Script
 			}
 		}
 
