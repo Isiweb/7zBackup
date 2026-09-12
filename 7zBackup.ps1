@@ -312,6 +312,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     command line error printed an undefined variable instead of the arguments
 #                                             Bug   : Directive names matched longer names (prefixes=, includesourcex=, ...): the
 #                                                     regexes used =* (zero or more =)
+#                                             Bug   : Size and age checks never ran: invalid maxfilesize, minfilesize, maxfileage and
+#                                                     minfileage values were silently ignored. Now they stop the job with an error
 #                                             Code  : Help for --clearbit said FULL or DIFF clear the Archive attribute: FULL or INCR
 #                                             Code  : Removed unused functions Clear-FsAttribute and Pause and other dead code
 
@@ -1712,16 +1714,16 @@ Function Validate-Variables {
 	# --------------------------------------------------------------------------------------------------------------------------
 	
 	If (Test-Variable "BkMaxFileSize") {
-		Set-Variable -Name "i" -Value [int64]0 -Scope Local
-		If(([system.int64]::tryparse($BkMaxFileSize, [System.Globalization.NumberStyles]::Number, [System.Globalization.CultureInfo]::CreateSpecificCulture("en-US") ,[ref]$d))) { 
-			Set-Variable -Name "BkMaxFileSize" -Value ([Math]::Abs($d)) -Scope Script
+		Set-Variable -Name "i" -Value ([int64]0) -Scope Local
+		If(([system.int64]::tryparse($BkMaxFileSize, [System.Globalization.NumberStyles]::Number, [System.Globalization.CultureInfo]::CreateSpecificCulture("en-US") ,[ref]$i))) { 
+			Set-Variable -Name "BkMaxFileSize" -Value ([Math]::Abs($i)) -Scope Script
 		} Else {
 			Write-Output "Missing or invalid maxfilesize directive. Must be an integer"
 		}
 		Remove-Variable -Name "i"
 	}
 	If (Test-Variable "BkMinFileSize") {
-		Set-Variable -Name "i" -Value [int64]0 -Scope Local
+		Set-Variable -Name "i" -Value ([int64]0) -Scope Local
 		If(([system.int64]::tryparse($BkMinFileSize, [System.Globalization.NumberStyles]::Number, [System.Globalization.CultureInfo]::CreateSpecificCulture("en-US") ,[ref]$i))) { 
 			Set-Variable -Name "BkMinFileSize" -Value ([Math]::Abs($i)) -Scope Script
 		} Else {
@@ -1733,21 +1735,21 @@ Function Validate-Variables {
 	If((Test-Variable "BkMinFileSize") -And !($BkMinFileSize -gt 0)) { Remove-Variable -Name "BkMinFileSize" }
 
 	If (Test-Variable "BkMaxFileAge") {
-		Set-Variable -Name "d" -Value [double]0 -Scope Local
+		Set-Variable -Name "d" -Value ([double]0) -Scope Local
 		If(([system.Double]::tryparse($BkMaxFileAge, [System.Globalization.NumberStyles]::AllowDecimalPoint, [System.Globalization.CultureInfo]::CreateSpecificCulture("en-US") ,[ref]$d))) { 
 			Set-Variable -Name "BkMaxFileAge" -Value ([Math]::Abs($d)) -Scope Script
 		} Else {
-			Write-Output "Missing or invalid minfilesize directive. Must be a valid number"
+			Write-Output "Missing or invalid maxfileage directive. Must be a valid number"
 		}
 		Remove-Variable -Name "d"
 	}
 	
 	If (Test-Variable "BkMinFileAge") {
-		Set-Variable -Name "d" -Value [double]0 -Scope Local
+		Set-Variable -Name "d" -Value ([double]0) -Scope Local
 		If(([system.Double]::tryparse($BkMinFileAge, [System.Globalization.NumberStyles]::AllowDecimalPoint, [System.Globalization.CultureInfo]::CreateSpecificCulture("en-US") ,[ref]$d))) { 
 			Set-Variable -Name "BkMinFileAge" -Value ([Math]::Abs($d)) -Scope Script
 		} Else {
-			Write-Output "Missing or invalid minfilesize directive. Must be a valid number"
+			Write-Output "Missing or invalid minfileage directive. Must be a valid number"
 		}
 		Remove-Variable -Name "d"
 	}
