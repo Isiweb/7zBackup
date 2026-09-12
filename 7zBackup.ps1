@@ -342,6 +342,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     NOT ARCHIVED check loops over the catalog instead of piping it
 #                                             Speed : Selection statistics are summed during the scan: Catalog-Stats.csv and its
 #                                                     Import-Csv / Group-Object pass (about 36 us per file) are gone
+#                                             Bug   : 7-Zip output was read by PowerShell events: lines came out of order, stderr lines
+#                                                     were joined into one and lines still queued when 7-Zip exited were lost
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -2797,16 +2799,25 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		$SWriters.CompressDetail = New-Object -TypeName System.IO.StreamWriter($BkCompressDetail, [String]$True, [System.Text.Encoding]::UTF8)
 		$SWriters.CompressDetail.AutoFlush = $True
 		
-		# Initialize StringBuilder for StdErr
-		$oStdErrBuilder = New-Object -TypeName System.Text.StringBuilder
-		
-		# Adding event handers for stdout and stderr.
-		$stdOutScripBlock = { if (! [String]::IsNullOrEmpty($EventArgs.Data)) { $Event.MessageData.WriteLine($EventArgs.Data) } }
-		$stdErrScripBlock = { if (! [String]::IsNullOrEmpty($EventArgs.Data)) { $Event.MessageData.Append(" " + $EventArgs.Data) | Out-Null } }
-		
-		# Register Event Handlers
-		$oStdOutEvent = Register-ObjectEvent -InputObject $oProcess -Action $stdOutScripBlock -EventName 'OutputDataReceived' -MessageData $SWriters.CompressDetail
-		$oStdErrEvent = Register-ObjectEvent -InputObject $oProcess -Action $stdErrScripBlock -EventName 'ErrorDataReceived'  -MessageData $oStdErrBuilder
+		# 7-Zip output is read by C# handlers. PowerShell event actions ran out of order, and actions
+		# still queued when 7-Zip exited were lost. Stdout goes to Compress-Detail, stderr to a queue
+		If(!("SevenZipOutput" -as [type])) {
+			Add-Type -TypeDefinition @"
+using System;
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.IO;
+public class SevenZipOutput {
+	readonly ConcurrentQueue<string> errors = new ConcurrentQueue<string>();
+	public SevenZipOutput(Process process, StreamWriter detail) {
+		process.OutputDataReceived += (sender, e) => { if (!String.IsNullOrEmpty(e.Data)) { detail.WriteLine(e.Data); } };
+		process.ErrorDataReceived += (sender, e) => { if (!String.IsNullOrEmpty(e.Data)) { errors.Enqueue(e.Data); } };
+	}
+	public bool TryGetError(out string line) { return errors.TryDequeue(out line); }
+}
+"@
+		}
+		$sevenZipOutput = New-Object SevenZipOutput($oProcess, $SWriters.CompressDetail)
 		
 		# Start the clocks
 		$MyContext.CompressionStart = Get-Date
@@ -2825,7 +2836,6 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		}
 		[void]$oProcess.BeginOutputReadLine()
 		[void]$oProcess.BeginErrorReadLine()		
-		$lastStdErrLine = 0
 		
 		# Begin polling Process
 		While (!($oProcess.HasExited)) {
@@ -2835,17 +2845,9 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 			Get-ChildItem -Path $BkDestPath -Filter ("{0}*" -f $BkArchiveName) | ?{ !$_.PSIscontainer } | ForEach-Object { $ArchiveSize += $_.Length }
 			If ( $ArchiveSize -gt 0 ) { $Status = "Archive Size {0,0:n2} MByte. so far ..." -f ($ArchiveSize / 1Mb) }
 			
-			# Look for any message from 7z in stdErr queue
-			$oStdErrBuilderLines = @($oStdErrBuilder.ToString().Split([System.Environment]::NewLine))
-			if($oStdErrBuilderLines.Count -gt 0) {
-				$i = 0
-				$oStdErrBuilderLines | ForEach-Object {
-					$i++
-					If($i -gt $lastStdErrLine) {
-						If($_.ToString().Length -gt 0) {Trace (" !{0}" -f $_.ToString()); $lastStdErrLine = $i}
-					}
-				}
-			}
+			# Log the 7-Zip error lines received so far, in order
+			$stdErrLine = $null
+			While($sevenZipOutput.TryGetError([ref]$stdErrLine)) { Trace (" !{0}" -f $stdErrLine) }
 			
 			
 			Write-Progress -Activity "Archiving into $BkDestFile" -Status $Status -CurrentOperation "Please wait ..."
@@ -2860,16 +2862,18 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 			}
 		}
 		
-		# Retrieve ExitCode if not already defined 
+		# HasExited can be true before the last output events ran: WaitForExit() without a timeout waits for them
+		$oProcess.WaitForExit()
+		$stdErrLine = $null
+		While($sevenZipOutput.TryGetError([ref]$stdErrLine)) { Trace (" !{0}" -f $stdErrLine) }
+
+		# Retrieve ExitCode if not already defined
 		If(!(Test-Variable "Bk7ZipRetc")) { Set-Variable -Name "Bk7ZipRetc" -value $oProcess.ExitCode -scope Script }
 		
 		# Stop the clock
 		$MyContext.CompressionEnd = Get-Date
 		$MyContext.CompressionElapsed = New-TimeSpan $MyContext.CompressionStart $MyContext.CompressionEnd
 		
-		# Remove event handlers
-		Unregister-Event -SourceIdentifier $oStdOutEvent.Name
-		Unregister-Event -SourceIdentifier $oStdErrEvent.Name		
 		
 		# Close StreamWriter for Compress Details
 		$SWriters.CompressDetail.Flush()
