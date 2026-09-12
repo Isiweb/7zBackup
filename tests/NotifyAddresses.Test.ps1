@@ -36,7 +36,7 @@ $selection = Join-Path $work "selection.txt"
 Set-Content -LiteralPath $selection -Value "includesource=$work\source|alias=Source"
 
 # Runs Validate-Variables with an otherwise valid setup and the given To address(es); returns the errors
-Function Invoke-Validation ($notifyTo) {
+Function Invoke-Validation ($notifyTo, $from = "backup@example.com") {
 	foreach ($name in "BkNotifyLog", "BkNotifyLogCc", "BkNotifyLogBcc") { Remove-Variable -Name $name -Scope Script }
 	$script:MyContext       = [hashtable]::Synchronized(@{ PSVer = [int]$PSVersionTable.PSVersion.Major; WinVer = @("10"); Logger = (New-Object System.Text.StringBuilder) })
 	$script:Counters        = @{ Warnings = 0 }
@@ -45,7 +45,7 @@ Function Invoke-Validation ($notifyTo) {
 	$script:BkDestPath      = "$work\dest"
 	$script:BkArchivePrefix = "test"
 	$script:BkNotifyLog     = $notifyTo
-	$script:BkSmtpFrom      = "backup@example.com"
+	$script:BkSmtpFrom      = $from
 	$script:BkSmtpRelay     = "smtp.example.com"
 	Write-Output @(Validate-Variables)
 }
@@ -69,6 +69,13 @@ Assert ($errors.Count -eq 0)                                  "no validation err
 Assert (!(Test-Variable "BkNotifyLog"))                       "no To address is left"
 Assert ($Counters.Warnings -ge 1)                             "a warning is counted"
 Assert ($MyContext.Logger.ToString().Contains("no notification")) "the log says no notification will be sent"
+
+Write-Host "`n Case: sender given as a one-element array (e.g. @(...) in 7zBackup-vars.ps1)"
+$errors = @(Invoke-Validation "ok@example.com" @("backup@example.com"))
+Assert ($errors.Count -eq 0) "no validation error [$($errors -join ' | ')]"
+# Send-Notification assigns the sender to MailMessage.From, which does not accept an array
+$fromError = $(Try { $message = New-Object System.Net.Mail.MailMessage; $message.From = $BkSmtpFrom; "" } Catch { $_.Exception.GetBaseException().Message })
+Assert ($fromError -eq "") "the checked sender can be used as MailMessage.From [$fromError]"
 
 Remove-Item -LiteralPath $work -Recurse -Force
 

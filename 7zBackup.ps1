@@ -329,6 +329,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     startup (issue #14). If loading fails, a warning is logged and SmtpClient is kept
 #                                             Feat  : Notification emails are sent with MailKit when --mailkitpath is set (issue #14)
 #                                                     Port 465 uses TLS on connect, --smtpssl requires STARTTLS on other ports
+#                                             Bug   : A sender given as an array (e.g. @(...) in the vars file) passed the check, but the
+#                                                     email failed: the joined value was a local copy, the script kept the array
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -2098,7 +2100,7 @@ Function Validate-Variables {
 		If(!(Test-Variable "BkSmtpFrom"))  { 
 			Write-Output "Missing or invalid --notifyfrom argument" 
 		} Else {
-			If($BkSmtpFrom -is [array]) { $BkSmtpFrom = ($BkSmtpFrom -join "") }
+			If($BkSmtpFrom -is [array]) { Set-Variable -Name BkSmtpFrom -Value ($BkSmtpFrom -join "") -Scope Script }
 			If(!(IsValidEmailAddress $BkSmtpFrom)) { 
 				Write-Output ("Missing or invalid --notifyfrom argument. {0} is not a valid email address" -f $BkSmtpFrom) 
 				Remove-Variable -Name BkSmtpFrom -Scope Script
