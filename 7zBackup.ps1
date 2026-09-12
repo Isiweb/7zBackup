@@ -283,6 +283,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     never detected. Locks are now checked by process id and start time
 #                                             Bug   : Selection exceptions (e.g. access denied) were never logged nor counted as
 #                                                     warnings: their writer used an undefined variable
+#                                             Bug   : 7-Zip warnings (missing or unreadable files) were never logged nor counted:
+#                                                     the match expected drive paths. Items are now matched against the catalog
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -2688,7 +2690,16 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		If ([int]$MyContext.SevenZBinVersionInfo.Major -le 9) {
 			$relevantMessages = Get-Content $BkCompressDetail -encoding UTF8 | Where-Object {$_ -match "\ WARNING:\ |\ :\ "}
 		} else {
-			$relevantMessages = Get-Content $BkCompressDetail -encoding UTF8 | Where-Object {$_ -match "[A-Z]{1}\:\\.* \:\ .{1,}$"}
+			# 7-Zip 15+ prints "item : message" for each item it could not add. Output events
+			# may arrive out of order, so match items listed in the catalog, not positions
+			$relevantMessages = @()
+			$warningLines = @(Get-Content $BkCompressDetail -encoding UTF8 | Where-Object {$_.Contains(" : ")})
+			If($warningLines.Count -gt 0) {
+				$warningItems = @{}
+				$warningLines | ForEach-Object { $warningItems[$_.Substring(0, $_.IndexOf(" : "))] = $False }
+				Get-Content $BkCatalogInclude -encoding UTF8 | Where-Object { $warningItems.ContainsKey($_) } | ForEach-Object { $warningItems[$_] = $True }
+				$relevantMessages = @($warningLines | Where-Object { $warningItems[$_.Substring(0, $_.IndexOf(" : "))] })
+			}
 		}
 		
 		#If any relevant message then output
