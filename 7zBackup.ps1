@@ -273,6 +273,8 @@ $version = "2.1.3-Stable"  # 20200514 Anlan   Code  : Enclosed [console]::TreatC
 $version = "2.1.4-Stable"  # 20200824 Anlan   Code  : Speed up PostArchiving a little bit using a range iterator
 $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit acted also on files 7-Zip failed to store
 #                                                     Processed items are now read from the finished archive
+#                                             Bug   : With nofollowjunctions, folders enumerated after a skipped junction
+#                                                     could be silently left out of the scan
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1127,6 +1129,8 @@ Function ProcessFolder ($thisFolder) {
 	If($scanThisPathForRecursion -And (!(Check-CTRLCRequest -eq $True))) {
 		$childFolders = @($childItems | ? {$_.PSIsContainer})
 		If($childFolders.Count) {
+			# Queue children right after this folder, in order. Skipped junctions take no slot
+			$insertAt = $catalogFoldersIndex + 1
 			for ($i=0; $i -lt $childFolders.Count; $i++) {
 
 				$childFolderItem = @{}
@@ -1143,11 +1147,7 @@ Function ProcessFolder ($thisFolder) {
 					continue
 				}
 				
-				If ($catalogFoldersIndex -eq $catalogFolders.Count) {
-					[void] $catalogFolders.Add($childFolderItem)
-				} Else {
-					[void] $catalogFolders.Insert(($catalogFoldersIndex + ($i + 1)), $childFolderItem)
-				}
+				[void] $catalogFolders.Insert($insertAt++, $childFolderItem)
 			}
 		}
 	}
