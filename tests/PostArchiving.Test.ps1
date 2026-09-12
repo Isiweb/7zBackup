@@ -39,13 +39,15 @@ Function Invoke-Case {
 	New-Item -ItemType Directory $alias -Force | Out-Null
 
 	$nonAscii = "perch" + [char]0x00E9 + ".txt"
-	$names = @("ok.txt", $nonAscii, "locked.txt", "br[1].txt", "noindex.txt")
+	$names = @("ok.txt", $nonAscii, "locked.txt", "br[1].txt", "noindex.txt", "readonly.txt")
 	foreach ($name in $names) {
 		Set-Content -LiteralPath (Join-Path $alias $name) -Value $name
 		(Get-Item -LiteralPath (Join-Path $alias $name)).Attributes = [System.IO.FileAttributes]::Archive
 	}
 	# An attribute Set-ItemProperty refuses to write back, like those of OneDrive files (issue #13)
 	(Get-Item -LiteralPath (Join-Path $alias "noindex.txt")).Attributes = [System.IO.FileAttributes]"Archive, NotContentIndexed"
+	# A read-only file: move must still delete it
+	(Get-Item -LiteralPath (Join-Path $alias "readonly.txt")).Attributes = [System.IO.FileAttributes]"Archive, ReadOnly"
 	$list = Join-Path $work "root\Catalog-Include.txt"
 	[System.IO.File]::WriteAllLines($list, [string[]]($names | ForEach-Object { "Alias\$_" }), (New-Object System.Text.UTF8Encoding $True))
 
@@ -96,12 +98,15 @@ Function Invoke-Case {
 		Assert (Test-Path -LiteralPath $locked)                         "${label}: locked.txt (not in archive) is kept"
 		Assert (!(Test-Path -LiteralPath (Join-Path $alias "br[1].txt"))) "${label}: archived name with brackets is deleted"
 		Assert (!(Test-Path -LiteralPath (Join-Path $alias "noindex.txt"))) "${label}: archived NotContentIndexed file is deleted"
+		Assert (!(Test-Path -LiteralPath (Join-Path $alias "readonly.txt"))) "${label}: archived read-only file is deleted"
 	} Else {
 		Assert (!(Test-ArchiveBit (Join-Path $alias "ok.txt")))  "${label}: archived ok.txt has Archive bit cleared"
 		Assert (!(Test-ArchiveBit (Join-Path $alias $nonAscii))) "${label}: archived non-ASCII file has Archive bit cleared"
 		Assert (Test-ArchiveBit $locked)                         "${label}: locked.txt (not in archive) keeps Archive bit"
 		Assert (!(Test-ArchiveBit (Join-Path $alias "br[1].txt")))   "${label}: archived name with brackets has Archive bit cleared"
 		Assert (!(Test-ArchiveBit (Join-Path $alias "noindex.txt"))) "${label}: archived NotContentIndexed file has Archive bit cleared"
+		$readOnly = (Get-Item -LiteralPath (Join-Path $alias "readonly.txt") -Force).Attributes
+		Assert (!($readOnly -band [System.IO.FileAttributes]::Archive) -and ($readOnly -band [System.IO.FileAttributes]::ReadOnly)) "${label}: archived read-only file has Archive bit cleared and stays read-only [$readOnly]"
 		Assert ($script:Counters.Warnings -eq 1)                     "${label}: only locked.txt is a warning, no FAILED [got: $($script:Counters.Warnings)]"
 	}
 

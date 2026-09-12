@@ -336,6 +336,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                             Speed : Scan progress is updated at most every 500 ms: Write-Progress took milliseconds
 #                                                     per call and the scan called it 3 times per folder
 #                                             Speed : Paths built once per file use [IO.Path]::Combine instead of Join-Path (90 to 3 us)
+#                                             Speed : PostArchiving deletes and clears files with .NET calls, not Get-Item / Remove-Item
+#                                                     (about 360 to 65 us per file), and keeps listing entries as plain strings
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -916,11 +918,11 @@ Function PostArchiving {
 	}
 	# Read line by line: -slt prints about ten lines per item, too much for a single string
 	# Entries follow the "----------" line. The "Path = " line above it is the archive itself
-	$archivedItems = New-Object System.Collections.ArrayList
+	$archivedItems = New-Object System.Collections.Generic.List[string]
 	$listingEntries = $False
 	While($null -ne ($listLine = $oListProcess.StandardOutput.ReadLine())) {
 		If($listLine -eq "----------") { $listingEntries = $True }
-		ElseIf($listingEntries -and $listLine.StartsWith("Path = ")) { [void]$archivedItems.Add((New-Object PSObject -Property @{ File = $listLine.Substring(7) })) }
+		ElseIf($listingEntries -and $listLine.StartsWith("Path = ")) { $archivedItems.Add($listLine.Substring(7)) }
 	}
 	$oListProcess.WaitForExit()
 	If($oListProcess.ExitCode -ne 0) {
@@ -933,7 +935,7 @@ Function PostArchiving {
 	# Selected items not in the archive. Items 7-Zip reported while adding ($warningItems, filled by
 	# the caller) are already logged with their reason: only silent misses are listed here
 	$archivedPaths = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-	foreach ($entry in $archivedItems) { [void]$archivedPaths.Add($entry.File) }
+	foreach ($entry in $archivedItems) { [void]$archivedPaths.Add($entry) }
 	$notArchived = @(Get-Content $BkCatalogInclude -Encoding UTF8 | Where-Object { !$archivedPaths.Contains($_) -and !($warningItems -and $warningItems[$_]) })
 	If($notArchived.Count -gt 0) {
 		Trace " Selected items not in archive"
@@ -965,26 +967,32 @@ Function PostArchiving {
 	Trace " -------------------------------------------"
 	
 	$archiveAttr = [System.IO.FileAttributes]::Archive
+	$readOnlyAttr = [System.IO.FileAttributes]::ReadOnly
 	foreach ($entry in $BkCompressDetailItems) {
 		If(Check-CTRLCRequest -eq $True) { break; }
-		
-		$item = Get-Item -LiteralPath ([System.IO.Path]::Combine($BkRootDir, $entry.File)) -Force
-		if($? -and $item) {
-			If($BkType -eq "move") {
-				$item | ? { !$_.PSIsContainer } | Remove-Item -Force | Out-Null
-				If(!($?)) {Trace (" FAILED : {0}" -f $entry.File ); $Counters.Warnings++  }
-			} Else {
-				If(($item.Attributes -band $archiveAttr)) {
 
+		# .NET calls, not Get-Item / Remove-Item: this loop runs once per archived item
+		$path = [System.IO.Path]::Combine($BkRootDir, $entry)
+		If([System.IO.File]::Exists($path) -or [System.IO.Directory]::Exists($path)) {
+			Try {
+				$attributes = [System.IO.File]::GetAttributes($path)
+				If($BkType -eq "move") {
+					# Folders are kept. Remove-Item -Force deleted read-only files, File.Delete does not
+					If(!($attributes -band [System.IO.FileAttributes]::Directory)) {
+						If($attributes -band $readOnlyAttr) { [System.IO.File]::SetAttributes($path, $attributes -bXOR $readOnlyAttr) }
+						[System.IO.File]::Delete($path)
+					}
+				} ElseIf($attributes -band $archiveAttr) {
 					# Not Set-ItemProperty: it rejects attributes like those of OneDrive files and reads [ ] in names as wildcards
-					Try { $item.Attributes = $item.Attributes -bXOR $archiveAttr }
-					Catch { Trace (" FAILED : {0}" -f $entry.File ); $Counters.Warnings++ }
+					[System.IO.File]::SetAttributes($path, $attributes -bXOR $archiveAttr)
 				}
+			} Catch {
+				Trace (" FAILED : {0}" -f $entry); $Counters.Warnings++
 			}
 		} Else {
-			Write-Host " ? " + ([System.IO.Path]::Combine($BkRootDir, $entry.File))
+			Write-Host " ? " + $path
 		}
-		
+
 		$ItemsDone++
 		$ItemsCountDown--
 		If($ItemsCountDown -le 0) {

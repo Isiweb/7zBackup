@@ -24,7 +24,8 @@ Function Get-Function ([string]$name) {
 Function Get-LoopCommands ([string]$function, [type]$loopType, [string]$headerText) {
 	$loop = (Get-Function $function).FindAll({ param($n) $n -is $loopType -and $n.Extent.Text.Split("`n")[0].Contains($headerText) }, $True)[0]
 	If(!$loop) { Return $null }
-	Write-Output @($loop.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $True) | ForEach-Object { $_.GetCommandName() })
+	# -NoEnumerate: a loop without commands returns an empty list, not $null
+	Write-Output -NoEnumerate @($loop.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $True) | ForEach-Object { $_.GetCommandName() })
 }
 
 Write-Host "`n Case: ProcessFolder, loop over the files of a folder"
@@ -36,6 +37,12 @@ Write-Host "`n Case: PostArchiving, loop over the archived items"
 $commands = Get-LoopCommands "PostArchiving" ([System.Management.Automation.Language.ForEachStatementAst]) '$BkCompressDetailItems'
 Assert ($null -ne $commands)                                              "precondition, loop found"
 Assert (@($commands | Where-Object { $_ -eq "Join-Path" }).Count -eq 0)   "no Join-Path per item [$(($commands | Sort-Object -Unique) -join ', ')]"
+Assert (@($commands | Where-Object { $_ -in "Get-Item", "Remove-Item" }).Count -eq 0) "no Get-Item or Remove-Item per item [$(($commands | Sort-Object -Unique) -join ', ')]"
+
+Write-Host "`n Case: PostArchiving, loop over the archive listing lines"
+$commands = Get-LoopCommands "PostArchiving" ([System.Management.Automation.Language.WhileStatementAst]) 'StandardOutput.ReadLine()'
+Assert ($null -ne $commands)                                              "precondition, loop found"
+Assert (@($commands | Where-Object { $_ -eq "New-Object" }).Count -eq 0)  "no New-Object per listing line [$(($commands | Sort-Object -Unique) -join ', ')]"
 
 Write-Host ""
 If($Failures -gt 0) { Write-Host " $Failures assertion(s) failed" -ForegroundColor Red; exit 1 }
