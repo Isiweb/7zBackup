@@ -279,6 +279,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     or renamed copies. Archive name regex is now anchored
 #                                             Bug   : matchcleanupfiles tested an undefined variable: cleanup never ran, or deleted
 #                                                     every file with a regex matching empty text. Cleaned files were archived
+#                                             Bug   : A refused run deleted the running instance's lock file and stale locks were
+#                                                     never detected. Locks are now checked by process id and start time
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -668,7 +670,8 @@ Function Clear-Script {
 
 	
     If ((Test-Variable "cmdLineBatch")) {if ((Test-Path ($cmdLineBatch))) { Remove-Item -LiteralPath $cmdLineBatch | Out-Null }}
-	If ((Test-Variable "BkLockFile")) {if ((Test-Path ($BkLockFile))) { Remove-Item -LiteralPath $BkLockFile | Out-Null }}
+	# Only the run that created the lock may remove it
+	If ((Test-Variable "BkLockFile") -and ($MyContext.LockOwned)) {if ((Test-Path ($BkLockFile))) { Remove-Item -LiteralPath $BkLockFile | Out-Null }}
 	Set-Location ($MyContext.StartDir)
 	If ((Test-Path -Path ($BkRootDir) -PathType Container)) { Remove-RootDir $BkRootDir | Out-Null }
 	
@@ -1377,52 +1380,33 @@ Function Test-Lock {
 	If(Test-Path -LiteralPath $BkLockFile -pathType Leaf) {
 
 		# A previously executed script has left it's lock file
-		Get-Content $BkLockFile -Encoding Ascii | Where-Object {$_ -imatch "^PID="} | ForEach-Object {
-			If($_ -match "^PID=")  {Set-Variable -name "OldPid" -value ($_.Substring($_.IndexOf("=") + 1)) -scope Local }
-			If($_ -match "^Root=") {Set-Variable -name "OldRoot" -value ($_.Substring($_.IndexOf("=") + 1)) -scope Local }
+		$OldPid = $null; $OldStart = $null; $OldRoot = $null
+		foreach ($line in @(Get-Content $BkLockFile -Encoding Ascii)) {
+			If($line -match "^PID=")   { $OldPid   = $line.Substring($line.IndexOf("=") + 1) }
+			If($line -match "^Start=") { $OldStart = $line.Substring($line.IndexOf("=") + 1) }
+			If($line -match "^Root=")  { $OldRoot  = $line.Substring($line.IndexOf("=") + 1) }
 		}
 
-		If (Test-Variable "OldPid") {
-		
-			$OldProcess = Get-Process -Id $OldPid 
-			If (($?) -And ($OldProcess)) {
-				
-				If ($OldPid -eq [System.Diagnostics.Process]::GetCurrentProcess().Id) {
+		If ($OldPid) {
 
-				   If ((Test-Variable "OldRoot")) { 
-						If(Test-Path $OldRoot -PathType Container ) { Remove-RootDir $OldRoot | Out-Null}
-					}
-				   Remove-Item -LiteralPath $BkLockFile -Force | Out-Null
-			   
-				}
-					   
-				ElseIf ($OldProcess.Responding) {
-					
+			# Same process id and same start time: the previous run is still active.
+			# A reused process id has another start time. An unreadable start time
+			# (e.g. elevated process) can not prove the lock is stale
+			$OldProcess = Get-Process -Id $OldPid
+			If (($OldProcess) -And ($OldPid -ne $PID)) {
+				If (($null -eq $OldProcess.StartTime) -Or ($OldProcess.StartTime.ToUniversalTime().Ticks -eq $OldStart)) {
 					Write-Output ("A previous operation is running with process id {0}`n Quitting ...`n " -f $OldPid)
 					Return
 				}
-				
-				Else {
-				
-					# Try Stopping the non-responding process
-					Stop-Process -Id $OldPid -Force | Out-Null
-					If(!($?)) {
-						Write-Output ("A previous operation is not responding with process id {0}`n Quitting ...`n " -f $OldPid)
-						Return
-					}
-					If(Test-Variable "OldRoot") { If(Test-Path -LiteralPath $OldRoot -PathType Container ) { Remove-RootDir $OldRoot | Out-Null } }
-					Remove-Item -LiteralPath $BkLockFile | Out-Null
-					If(!($?)) {
-						Write-Output ("Could not remove a previous lock file`n Quitting ...`n ")
-						Return
-					}
-					
-				}
-				
 			}
-			   
 
-				
+			# Stale lock: the previous run ended abnormally
+			If(($OldRoot) -And (Test-Path -LiteralPath $OldRoot -PathType Container)) { Remove-RootDir $OldRoot | Out-Null }
+			Remove-Item -LiteralPath $BkLockFile -Force | Out-Null
+			If(!($?)) {
+				Write-Output ("Could not remove a previous lock file`n Quitting ...`n ")
+				Return
+			}
 		} Else {
 		
 			If ((New-TimeSpan -End (Get-Date) -Start (Get-Item -LiteralPath $BkLockFile).LastWriteTime).TotalHours -gt 72) { 
@@ -1449,11 +1433,12 @@ Function Test-Lock {
 	
 	# Drop a new lock file in place
 	New-Item -Path $BkLockFile -ItemType File -Force | Out-Null
-	If ($?) {("PID={0}`nRoot={1}" -f [System.Diagnostics.Process]::GetCurrentProcess().Id, $BkRootDir) | Out-File $BkLockFile -encoding ASCII -append }
+	If ($?) {("PID={0}`nStart={1}`nRoot={2}" -f [System.Diagnostics.Process]::GetCurrentProcess().Id, [System.Diagnostics.Process]::GetCurrentProcess().StartTime.ToUniversalTime().Ticks, $BkRootDir) | Out-File $BkLockFile -encoding ASCII -append }
 	If(!($?)) {
 		Write-Output ("Could not write lock file`n Quitting ...`n ")
 		Return
 	}
+	$MyContext.LockOwned = $True
 
 }
 
