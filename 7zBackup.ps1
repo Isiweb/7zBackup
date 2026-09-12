@@ -296,6 +296,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                             Bug   : Notification addresses: valid ones (a@x.com, name+tag@, 1user@) were rejected,
 #                                                     invalid ones were not reported and still used. Now warned and dropped
 #                                             Bug   : A failed notification email showed an empty reason: now the underlying error
+#                                             Sec   : The archive password was visible in the process list and verbose output:
+#                                                     it now goes to 7-Zip input. 7-Zip console charset is UTF-8
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -888,12 +890,20 @@ Function PostArchiving {
 	$oListStartInfo = New-Object -TypeName System.Diagnostics.ProcessStartInfo
 	$oListStartInfo.FileName = $Bk7ZipBin
 	$oListStartInfo.Arguments = "l -slt -sccUTF-8 `"$archiveToList`""
-	If(Test-Variable "BkArchivePassword") { $oListStartInfo.Arguments += " -p$BkArchivePassword" }
+	$oListStartInfo.RedirectStandardInput = (Test-Variable "BkArchivePassword")   # no -p: 7-Zip asks the password on its input when it needs it
 	$oListStartInfo.RedirectStandardOutput = $True
 	$oListStartInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
 	$oListStartInfo.UseShellExecute = $False
 	$oListStartInfo.CreateNoWindow = $True
-	$oListProcess = [System.Diagnostics.Process]::Start($oListStartInfo)
+	# .NET Framework puts a BOM before redirected input in a UTF-8 console: start with UTF-8 without BOM
+	$savedInputEncoding = [Console]::InputEncoding
+	If(Test-Variable "BkArchivePassword") { Try { [Console]::InputEncoding = New-Object System.Text.UTF8Encoding $False } Catch {} }
+	Try { $oListProcess = [System.Diagnostics.Process]::Start($oListStartInfo) } Finally { Try { [Console]::InputEncoding = $savedInputEncoding } Catch {} }
+	If(Test-Variable "BkArchivePassword") {
+		$passwordBytes = (New-Object System.Text.UTF8Encoding $False).GetBytes($BkArchivePassword + "`r`n")
+		$oListProcess.StandardInput.BaseStream.Write($passwordBytes, 0, $passwordBytes.Length)
+		$oListProcess.StandardInput.Close()
+	}
 	# Read line by line: -slt prints about ten lines per item, too much for a single string
 	# Entries follow the "----------" line. The "Path = " line above it is the archive itself
 	$archivedItems = New-Object System.Collections.ArrayList
@@ -2558,7 +2568,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		}
 		# Important !!!
 		$Bk7ZipArgs += "-scsUTF-8"															# Set charset for list files to UTF8
-		$Bk7ZipArgs += "-sccDOS"															# Set charset for console input/output to DOS (OEM) Windows
+		$Bk7ZipArgs += "-sccUTF-8"															# Set charset for console input/output to UTF-8 (password input, output decoding)
 		
 		# If 7zip is beyond version 9.2 then add some more switches
 		If ([int]$MyContext.SevenZBinVersionInfo.Major -ge 15) {
@@ -2599,7 +2609,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 	
 		$Bk7ZipArgs += "-t" + $BkArchiveType												# This is the type of the archive
 		If(Test-Variable "BkArchivePassword") { 
-			$Bk7ZipArgs += "-p$BkArchivePassword" 											# This is the password (if any)
+			$Bk7ZipArgs += "-p" 											# Password prompt: the password goes to 7-Zip input, never on the command line
 			If($BkEncryptHeaders) { $Bk7ZipArgs += "-mhe" }
 		}
 		
@@ -2616,6 +2626,9 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		$oProcessStartInfo.RedirectStandardOutput = $true
 		$oProcessStartInfo.UseShellExecute = $false
 		$oProcessStartInfo.CreateNoWindow = $true
+		$oProcessStartInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+		$oProcessStartInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+		$oProcessStartInfo.RedirectStandardInput = (Test-Variable "BkArchivePassword")
 		$oProcessStartInfo.Arguments = ($Bk7ZipArgs -join " ")
 		Write-Verbose "7z arguments:  $($Bk7ZipArgs -join ' ')"
 		$oProcess = New-Object -Typename System.Diagnostics.Process
@@ -2640,7 +2653,17 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		$MyContext.CompressionStart = Get-Date
 		
 		# Start Process
-		[void]$oProcess.Start()
+		# .NET Framework opens redirected input with Console.InputEncoding: in a UTF-8 console it puts
+		# a BOM before the password. Start with UTF-8 without BOM, then restore the console encoding
+		$savedInputEncoding = [Console]::InputEncoding
+		If(Test-Variable "BkArchivePassword") { Try { [Console]::InputEncoding = New-Object System.Text.UTF8Encoding $False } Catch {} }
+		Try { [void]$oProcess.Start() } Finally { Try { [Console]::InputEncoding = $savedInputEncoding } Catch {} }
+		If(Test-Variable "BkArchivePassword") {
+			# 7-Zip asks the password twice (enter and verify), reading UTF-8 (-sccUTF-8)
+			$passwordBytes = (New-Object System.Text.UTF8Encoding $False).GetBytes($BkArchivePassword + "`r`n" + $BkArchivePassword + "`r`n")
+			$oProcess.StandardInput.BaseStream.Write($passwordBytes, 0, $passwordBytes.Length)
+			$oProcess.StandardInput.Close()
+		}
 		[void]$oProcess.BeginOutputReadLine()
 		[void]$oProcess.BeginErrorReadLine()		
 		$lastStdErrLine = 0
