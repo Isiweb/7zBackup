@@ -25,8 +25,10 @@ Function New-WorkDir {
 
 # Scans $source aliased as "Alias" the way the 7zBackup.ps1 script body does.
 # Returns the lines written to the inclusion catalog.
-Function Invoke-Scan ([string]$work, [string]$source) {
+Function Invoke-Scan ([string]$work, [string]$source, [switch]$lowerCaseDrive) {
 	$script:BkRootDir = Join-Path $work "root"
+	# --workdrive accepts a lowercase letter: the root dir path then differs in case from paths PowerShell returns
+	If($lowerCaseDrive) { $script:BkRootDir = $script:BkRootDir.Substring(0, 1).ToLower() + $script:BkRootDir.Substring(1) }
 	New-Item -ItemType Directory $script:BkRootDir -Force | Out-Null
 	# 7zBackup.ps1 links each source into the root dir: a junction does the same without admin rights
 	cmd /c "mklink /J `"$script:BkRootDir\Alias`" `"$source`"" | Out-Null
@@ -96,6 +98,21 @@ foreach ($dryRun in $False, $True) {
 
 	Remove-Item -LiteralPath $work -Recurse -Force
 }
+
+# -----------------------------------------------------------------------------
+Write-Host "`n Case: root dir on a lowercase drive letter (--workdrive c)"
+$work   = New-WorkDir
+$source = Join-Path $work "source"
+New-Item -ItemType Directory "$source\sub", "$source\skip" -Force | Out-Null
+Set-Content -LiteralPath "$source\sub\deep.txt" -Value "deep"
+Set-Content -LiteralPath "$source\skip\skipped.txt" -Value "skipped"
+
+$BkType = "full"; $BkNoFollowJunctions = $False; $BkDryRun = $False; $matchcleanupfiles = $null; $matchexcludepath = '^Alias\\skip$'
+$included = @(Invoke-Scan $work $source -lowerCaseDrive)
+Assert ($included -contains "Alias\sub\deep.txt")      "file in a subfolder is selected with its path relative to the root dir"
+Assert (@($included -like "*skipped.txt").Count -eq 0) "matchexcludepath anchored on the alias still excludes its folder"
+
+Remove-Item -LiteralPath $work -Recurse -Force
 
 Write-Host ""
 If($Failures -gt 0) { Write-Host " $Failures assertion(s) failed" -ForegroundColor Red; exit 1 }

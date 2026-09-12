@@ -287,6 +287,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     the match expected drive paths. Items are now matched against the catalog
 #                                             Bug   : Selection file directives maxfilesize, minfilesize, maxfileage, minfileage,
 #                                                     compression, threads and solid were ignored. File ages accept integers
+#                                             Bug   : With a lowercase work drive letter subfolder paths became absolute: the archive
+#                                                     lost its folder structure and path directives stopped matching
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1151,7 +1153,8 @@ Function ProcessFolder ($thisFolder) {
 				$childFolderItem = @{}
 				$childFolderItem.Name = $childFolders[$i].Name
 				$childFolderItem.FullName = $childFolders[$i].FullName
-				$childFolderItem.RelativeName = $childFolders[$i].FullName.Replace($BkRootDir + "\" , "")
+				# Built from the parent: FullName may differ in case from $BkRootDir (e.g. lowercase --workdrive)
+				$childFolderItem.RelativeName = $thisFolder.RelativeName + "\" + $childFolders[$i].Name
 				$childFolderItem.ContainerAlias = $thisFolder.ContainerAlias
 				$childFolderItem.RealName = Join-Path -Path $BkSources[$thisFolder.ContainerAlias] -ChildPath ($childFolderItem.RelativeName.Replace($thisFolder.ContainerAlias, ""))
 				$childFolderItem.Depth = ($thisFolder.Depth + 1);
