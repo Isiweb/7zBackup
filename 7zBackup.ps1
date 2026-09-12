@@ -310,6 +310,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     Compress-Detail.txt was added to the archive (misspelled name filter)
 #                                             Bug   : Log messages printed ".Exception.Message" and ".Name" literally, and a 7-Zip
 #                                                     command line error printed an undefined variable instead of the arguments
+#                                             Bug   : Directive names matched longer names (prefixes=, includesourcex=, ...): the
+#                                                     regexes used =* (zero or more =)
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1707,7 +1709,7 @@ Function Validate-Variables {
 		If(
 			((Test-Variable "BkSelectionContents") -eq $False) -Or 
 			($BkSelectionContents.Count -eq 0) -Or
-			!(($BkSelectionContents | Where-Object {$_ -match "^includesource=*"}).Length -gt 0)
+			!(($BkSelectionContents | Where-Object {$_ -match "^includesource="}).Length -gt 0)
 		) { Write-Output "Missing or invalid --selection argument: file does not contain any `"includesource`" directive" } 
 		Else 
 		{
@@ -1722,7 +1724,7 @@ Function Validate-Variables {
 			$BkSelectionContents | Where-Object {$_ -match "^rotate=[0-9]"} | ForEach-Object { Set-Variable -name "BkRotate" -value ($_.Substring($_.IndexOf("=") + 1)) -scope Script }
 			
 			# Look whether selection contents holds specific prefix value to use.
-			$BkSelectionContents | Where-Object {$_ -match "^prefix=*"} | ForEach-Object { Set-Variable -name "BkArchivePrefix" -value ($_.Substring($_.IndexOf("=") + 1)) -scope Script }
+			$BkSelectionContents | Where-Object {$_ -match "^prefix="} | ForEach-Object { Set-Variable -name "BkArchivePrefix" -value ($_.Substring($_.IndexOf("=") + 1)) -scope Script }
 
 			# Look whether selection contents sets the keeping of empty dirs.
 			$BkSelectionContents | Where-Object {$_ -match "^emptydirs$"} | ForEach-Object { Set-Variable -name "BkKeepEmptyDirs" -value $True -scope Script }
@@ -2347,10 +2349,10 @@ If (Test-Variable "BkMinFileSize") { Trace " + Min File Size : $BkMinFileSize by
 # --------------------------------------------------------------------
 # Check we have an exclude criteria on file names
 # --------------------------------------------------------------------
-If($BkSelectionContents | Where-Object {$_ -match "^matchexcludefiles=*"}) {
+If($BkSelectionContents | Where-Object {$_ -match "^matchexcludefiles="}) {
 	Trace "`n Files Exclusion Criteria "
 	Trace " ------------------------------------------------------------------------------"
-	$BkSelectionContents | Where-Object {$_ -match "^matchexcludefiles=*"} | ForEach-Object {
+	$BkSelectionContents | Where-Object {$_ -match "^matchexcludefiles="} | ForEach-Object {
 		$line = $_.Substring($_.IndexOf("=") + 1).Trim()
 		If(($line)) {
 			Trace " - Regex : $line"
@@ -2364,10 +2366,10 @@ If($BkSelectionContents | Where-Object {$_ -match "^matchexcludefiles=*"}) {
 # --------------------------------------------------------------------
 # Check we have an exclude criteria on paths
 # --------------------------------------------------------------------
-If($BkSelectionContents | Where-Object {$_ -match "^matchexcludepath=*"}) {
+If($BkSelectionContents | Where-Object {$_ -match "^matchexcludepath="}) {
 	Trace "`n Exclude Paths Criteria "
 	Trace " ------------------------------------------------------------------------------"
-	$BkSelectionContents | Where-Object {$_ -match "^matchexcludepath=*"} | ForEach-Object {
+	$BkSelectionContents | Where-Object {$_ -match "^matchexcludepath="} | ForEach-Object {
 		$line = $_.Substring($_.IndexOf("=") + 1).Trim()
 		If(($line)) {
 			Trace " -match $line"
@@ -2380,10 +2382,10 @@ If($BkSelectionContents | Where-Object {$_ -match "^matchexcludepath=*"}) {
 # --------------------------------------------------------------------
 # Check we have any rule to stop digging into directories
 # --------------------------------------------------------------------
-If($BkSelectionContents | Where-Object {$_ -match "^matchstoprecurse=*"}) {
+If($BkSelectionContents | Where-Object {$_ -match "^matchstoprecurse="}) {
 	Trace "`n Stop Recursion Criteria "
 	Trace " ------------------------------------------------------------------------------"
-	$BkSelectionContents | Where-Object {$_ -match "^matchstoprecurse=*"} | ForEach-Object {
+	$BkSelectionContents | Where-Object {$_ -match "^matchstoprecurse="} | ForEach-Object {
 		$line = $_.Substring($_.IndexOf("=") + 1).Trim()
 		If(($line)) {
 			Trace " -match $line"
