@@ -333,6 +333,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     email failed: the joined value was a local copy, the script kept the array
 #                                             Bug   : The relay (--smtpserver) given as an array had the same problem: the joined
 #                                                     value was checked, the array was used
+#                                             Speed : Scan progress is updated at most every 500 ms: Write-Progress took milliseconds
+#                                                     per call and the scan called it 3 times per folder
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1017,7 +1019,7 @@ Function ProcessFolder ($thisFolder) {
 	$Counters.FoldersDone++
 	
 	# Status
-	Write-Progress -Activity ("Folder {0}" -f $thisFolder.RealName) -CurrentOperation "Checking ... " -Status ("Selected {0,0:n0} out of {1,0:n0} files in {2,0:n0} folders. {3,0:n2} MBytes to backup" -f  $Counters.FilesSelected, $Counters.FilesProcessed, $Counters.FoldersDone, ($Counters.BytesSelected / 1MB ))
+	Trace-Progress ("Folder {0}" -f $thisFolder.RealName) "Checking ... " ("Selected {0,0:n0} out of {1,0:n0} files in {2,0:n0} folders. {3,0:n2} MBytes to backup" -f  $Counters.FilesSelected, $Counters.FilesProcessed, $Counters.FoldersDone, ($Counters.BytesSelected / 1MB ))
 	
 	# Verify wether or not we have to scan this folder for files or stop recursion due to regexp or maxdepth reached
 	$scanThisPathForFiles = $True
@@ -1059,7 +1061,7 @@ Function ProcessFolder ($thisFolder) {
 	
 	# Get-ChildItems in folder
 	# Status
-	Write-Progress -Activity ("Folder {0}" -f $thisFolder.RealName) -CurrentOperation "Loading ... " -Status ("Selected {0,0:n0} out of {1,0:n0} files in {2,0:n0} folders. {3,0:n2} MBytes to backup" -f  $Counters.FilesSelected, $Counters.FilesProcessed, $Counters.FoldersDone, ($Counters.BytesSelected / 1MB ))
+	Trace-Progress ("Folder {0}" -f $thisFolder.RealName) "Loading ... " ("Selected {0,0:n0} out of {1,0:n0} files in {2,0:n0} folders. {3,0:n2} MBytes to backup" -f  $Counters.FilesSelected, $Counters.FilesProcessed, $Counters.FoldersDone, ($Counters.BytesSelected / 1MB ))
 	
 	Remove-Variable childItemsScanErrors -Scope Local | Out-Null
 	$childItems = @(Get-ChildItem -LiteralPath $thisFolder.RelativeName -Force -ErrorVariable childItemsScanErrors)
@@ -1076,7 +1078,7 @@ Function ProcessFolder ($thisFolder) {
 	}
 
 	# Status
-	Write-Progress -Activity ("Folder {0}" -f $thisFolder.RealName) -CurrentOperation "Scanning ... " -Status ("Selected {0,0:n0} out of {1,0:n0} files in {2,0:n0} folders. {3,0:n2} MBytes to backup" -f  $Counters.FilesSelected, $Counters.FilesProcessed, $Counters.FoldersDone, ($Counters.BytesSelected / 1MB ))
+	Trace-Progress ("Folder {0}" -f $thisFolder.RealName) "Scanning ... " ("Selected {0,0:n0} out of {1,0:n0} files in {2,0:n0} folders. {3,0:n2} MBytes to backup" -f  $Counters.FilesSelected, $Counters.FilesProcessed, $Counters.FoldersDone, ($Counters.BytesSelected / 1MB ))
 	
 	# If it is an empty directory
 	If($scanThisPathForRecursion -and (!$childItems.Count) -and ($BkKeepEmptyDirs -eq $True) -and !($childItemsScanErrors)) {
@@ -1653,6 +1655,22 @@ Function Test-Variable {
 Function Trace ($message) {
 	Write-Host ($message) 
 	[void]$MyContext.Logger.AppendLine($message)
+}
+
+# -----------------------------------------------------------------------------
+# Function 		: Trace-Progress
+# -----------------------------------------------------------------------------
+# Description	: Write-Progress at most once every 500 ms. Each Write-Progress
+#				  costs milliseconds and the scan calls this for every folder
+# Parameters    : [string]$activity  - The progress activity
+#                 [string]$operation - The current operation
+#                 [string]$status    - The progress status
+# Returns       : --
+# -----------------------------------------------------------------------------
+Function Trace-Progress ([string]$activity, [string]$operation, [string]$status) {
+	If($MyContext.ProgressWatch -and ($MyContext.ProgressWatch.ElapsedMilliseconds -lt 500)) { Return }
+	$MyContext.ProgressWatch = [System.Diagnostics.Stopwatch]::StartNew()
+	Write-Progress -Activity $activity -CurrentOperation $operation -Status $status
 }
 
 # -----------------------------------------------------------------------------
