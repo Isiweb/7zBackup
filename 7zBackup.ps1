@@ -281,6 +281,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     every file with a regex matching empty text. Cleaned files were archived
 #                                             Bug   : A refused run deleted the running instance's lock file and stale locks were
 #                                                     never detected. Locks are now checked by process id and start time
+#                                             Bug   : Selection exceptions (e.g. access denied) were never logged nor counted as
+#                                                     warnings: their writer used an undefined variable
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -2367,7 +2369,7 @@ Set-Location -path $BkRootDir
 # and how it's been generated.
 # --------------------------------------------------------------------
 $BkSelectionInfo  = Join-Path $BkRootDir "Selection-Info.txt" ; New-Item $BkSelectionInfo  -type File -Force -value ([string]::join([environment]::newline, (Get-Content -path $BkSelection -encoding ASCII))) | Out-Null
-$BkSelectionExcpt = Join-Path $BkRootDir "Selection-Excpt.csv"; New-Item $BkSelectionExcpt -type File -Force | Out-Null; "Id`tException`tTarget" | Out-File $BkCatalogExclude -encoding ASCII -append
+$BkSelectionExcpt = Join-Path $BkRootDir "Selection-Excpt.csv"; New-Item $BkSelectionExcpt -type File -Force | Out-Null; "Id`tException`tTarget" | Out-File $BkSelectionExcpt -encoding ASCII -append
 $BkCatalogInclude = Join-Path $BkRootDir "Catalog-Include.txt"; New-Item $BkCatalogInclude -type File -Force | Out-Null
 $BkCatalogExclude = Join-Path $BkRootDir "Catalog-Exclude.csv"; New-Item $BkCatalogExclude -type File -Force | Out-Null; "Id`tDirective`tType`tTarget" | Out-File $BkCatalogExclude -encoding ASCII -append
 $BkCatalogStats   = Join-Path $BkRootDir "Catalog-Stats.csv"  ; New-Item $BkCatalogStats   -type File -Force | Out-Null; "Id`tExtension`tSize" | Out-File $BkCatalogStats -encoding ASCII -append
@@ -2380,7 +2382,7 @@ $BkCompressDetail = Join-Path $BkRootDir "Compress-Detail.txt"; New-Item $BkComp
 # --------------------------------------------------------------------
 $SWriters.Inclusions = New-Object -TypeName System.IO.StreamWriter($BkCatalogInclude, [String]$True, [System.Text.Encoding]::UTF8)
 $SWriters.Exclusions = New-Object -TypeName System.IO.StreamWriter($BkCatalogExclude, [String]$True, [System.Text.Encoding]::ASCII)
-$SWriters.Exceptions = New-Object -TypeName System.IO.StreamWriter($BkCatalogExceptions, [String]$True, [System.Text.Encoding]::ASCII)
+$SWriters.Exceptions = New-Object -TypeName System.IO.StreamWriter($BkSelectionExcpt, [String]$True, [System.Text.Encoding]::ASCII)
 $SWriters.Stats = New-Object -TypeName System.IO.StreamWriter($BkCatalogStats, [String]$True, [System.Text.Encoding]::ASCII)
 $SWriters.GetEnumerator() | ForEach-Object { $_.Value.AutoFlush = $True }
 
@@ -2484,10 +2486,11 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 	
 	# Maybe there has been some exceptions during the selection progress. 
 	# If this is the case output them here.
-	If((Get-Item $BkSelectionExcpt).Length -gt 0) {
+	$selectionExceptions = @(Get-Content $BkSelectionExcpt | Select-Object -Skip 1)   # first line is the header
+	If($selectionExceptions.Count -gt 0) {
 		Trace "`n Exceptions during selection process"
 		Trace " ------------------------------------------------------------------------------"
-		Get-Content $BkSelectionExcpt | ForEach-Object {
+		$selectionExceptions | ForEach-Object {
 		Trace (" {0} " -f $_); $Counters.Warnings++
 		}
 	}
