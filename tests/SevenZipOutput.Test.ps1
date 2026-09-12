@@ -2,6 +2,8 @@
 # A fake 7-Zip prints 20,000 lines on stdout and 3 lines on stderr at once, then
 # exits: every stdout line must reach Compress-Detail.txt in order, and every
 # stderr line must be logged once, as its own line, in order.
+# A second fake 7-Zip exits at once while a child writes its last lines later:
+# they must still reach Compress-Detail.txt and the log.
 #
 # Usage: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\SevenZipOutput.Test.ps1
 
@@ -72,6 +74,53 @@ Assert ($Bk7ZipRetc -eq 1)                                   "precondition, the 
 Assert ($detail.Count -eq $outLines.Count)                   "Compress-Detail.txt has all 20,000 stdout lines [$($detail.Count)]"
 Assert ($firstDifference -eq -1)                             "stdout lines are in order [first difference at $firstDifference]"
 Assert (($logLines -join "|") -eq " !err line 1| !err line 2| !err line 3") "each stderr line is logged once, in order [$($logLines -join ' | ')]"
+
+Remove-Item -LiteralPath $work -Recurse -Force
+
+Write-Host "`n Case: last lines arrive after 7-Zip is seen as exited"
+# A background child keeps the output pipes open: the fake 7-Zip exits at once, its last lines
+# (the very last one without a newline) arrive about 4 seconds later, after the polling loop ended
+$work      = Join-Path $env:TEMP ("7zb-test-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
+$BkRootDir = Join-Path $work "root"
+New-Item -ItemType Directory $BkRootDir, "$work\dest" -Force | Out-Null
+$BkCatalogInclude = Join-Path $BkRootDir "Catalog-Include.txt"
+New-Item -ItemType File $BkCatalogInclude -Force | Out-Null
+$BkCompressDetail = Join-Path $BkRootDir "Compress-Detail.txt"
+New-Item -ItemType File $BkCompressDetail -Force | Out-Null
+[System.IO.File]::WriteAllText("$work\late-out.txt", "+ Alias\late.txt`r`n")
+[System.IO.File]::WriteAllText("$work\late-err.txt", "late err 1`r`nlate err 2")
+$lateCmd = Join-Path $work "late.cmd"
+Set-Content -LiteralPath $lateCmd -Encoding Ascii -Value @(
+	'@echo off',
+	'ping -n 5 127.0.0.1 >nul',
+	('type "{0}"' -f "$work\late-out.txt"),
+	('type "{0}" 1>&2' -f "$work\late-err.txt")
+)
+$fake7z = Join-Path $work "7z-fake.cmd"
+Set-Content -LiteralPath $fake7z -Encoding Ascii -Value @(
+	'@echo off',
+	'echo + Alias\early.txt',
+	'1>&2 echo early err',
+	('start /b "" cmd /c "{0}"' -f $lateCmd),
+	'exit /b 1'
+)
+
+$Bk7ZipBin  = $fake7z
+$BkDestPath = "$work\dest"
+$SWriters   = @{}
+$MyContext  = [hashtable]::Synchronized(@{ Cancelling = $False; Logger = (New-Object System.Text.StringBuilder); StartDir = $env:TEMP; WinVer = @("10"); SelectionStart = (Get-Date); SevenZBinVersionInfo = @{ ProductVersion = "19.00"; Major = "19" } })
+Set-Location -Path $BkRootDir
+
+. ([scriptblock]::Create($archivingBlock.Extent.Text))
+Set-Location -Path $env:TEMP
+
+$detail   = @([System.IO.File]::ReadAllLines($BkCompressDetail))
+$logLines = @($MyContext.Logger.ToString().Split("`n") | ForEach-Object { $_.TrimEnd() } | Where-Object { $_.StartsWith(" !") })
+
+Assert ($Bk7ZipRetc -eq 1)                                                          "precondition, the fake 7-Zip exits with 1"
+Assert (($oProcess.ExitTime - $MyContext.CompressionStart).TotalSeconds -lt 2)      "precondition, the fake 7-Zip exits at once [$(($oProcess.ExitTime - $MyContext.CompressionStart).TotalSeconds) s]"
+Assert (($detail -join "|") -eq "+ Alias\early.txt|+ Alias\late.txt")               "Compress-Detail.txt has the late stdout line [$($detail -join ' | ')]"
+Assert (($logLines -join "|") -eq " !early err| !late err 1| !late err 2")          "late stderr lines are logged, the last one without a newline too [$($logLines -join ' | ')]"
 
 Remove-Item -LiteralPath $work -Recurse -Force
 

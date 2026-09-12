@@ -162,6 +162,42 @@ foreach ($filter in "maxfileage", "minfileage") {
 	Remove-Item -LiteralPath $work -Recurse -Force
 }
 
+# -----------------------------------------------------------------------------
+Write-Host "`n Case: unreadable entries (denied folder, denied file, path over 260 characters) do not drop readable ones"
+$work   = New-WorkDir
+$source = Join-Path $work "source"
+New-Item -ItemType Directory "$source\Parent\ADenied", "$source\Parent\B", "$source\Parent\C" -Force | Out-Null
+Set-Content -LiteralPath "$source\Parent\ADenied\inside.txt" -Value "inside"
+Set-Content -LiteralPath "$source\Parent\B\b.txt" -Value "b"
+Set-Content -LiteralPath "$source\Parent\denied.txt" -Value "denied"
+Set-Content -LiteralPath "$source\Parent\ok.txt" -Value "ok"
+Set-Content -LiteralPath "$source\Parent\C\short.txt" -Value "short"
+$longName = ("L" * 240) + ".txt"
+[System.IO.File]::WriteAllText("\\?\$source\Parent\C\$longName", "long")
+# The owner can always change the permissions again: no admin rights needed to deny and restore
+icacls "$source\Parent\ADenied" /deny "${env:USERNAME}:(RD)" | Out-Null
+icacls "$source\Parent\denied.txt" /deny "${env:USERNAME}:(R)" | Out-Null
+$deniedFolderThrows = $False
+Try { [void]([System.IO.DirectoryInfo]"$source\Parent\ADenied").GetFileSystemInfos() } Catch { $deniedFolderThrows = $True }
+Assert $deniedFolderThrows "precondition, ADenied cannot be listed"
+Assert ([System.IO.File]::Exists("\\?\$source\Parent\C\$longName") -and ("$work\root\Alias\Parent\C\$longName".Length -gt 260)) "precondition, long file exists with a path over 260 characters"
+
+$BkType = "full"; $BkNoFollowJunctions = $False; $BkDryRun = $False; $matchcleanupfiles = $null; $matchexcludepath = $null
+$included   = @(Invoke-Scan $work $source)
+$exceptions = @(Get-Content -LiteralPath "$work\Exceptions.txt")
+Assert ($included -contains "Alias\Parent\ok.txt")         "readable file next to the denied folder is selected [$($included -join ', ')]"
+Assert ($included -contains "Alias\Parent\B\b.txt")        "file in the folder after the denied one is selected"
+Assert ($included -contains "Alias\Parent\denied.txt")     "denied file is still listed: 7-Zip reports it when it cannot read it"
+Assert ($included -contains "Alias\Parent\C\short.txt")    "short file next to the long one is selected"
+Assert ($included -contains "Alias\Parent\C\$longName")    "file with a path over 260 characters is selected"
+Assert (@($included -like "*inside.txt").Count -eq 0)      "file inside the denied folder is not selected"
+Assert (($exceptions.Count -eq 1) -and ($exceptions[0] -eq "0`tUnauthorizedAccessException`t$source\Parent\ADenied")) "the denied folder is logged once as an exception [$($exceptions -join ' | ')]"
+
+icacls "$source\Parent\ADenied" /remove:d "$env:USERNAME" | Out-Null
+icacls "$source\Parent\denied.txt" /remove:d "$env:USERNAME" | Out-Null
+[System.IO.File]::Delete("\\?\$source\Parent\C\$longName")
+Remove-Item -LiteralPath $work -Recurse -Force
+
 Write-Host ""
 If($Failures -gt 0) { Write-Host " $Failures assertion(s) failed" -ForegroundColor Red; exit 1 }
 Write-Host " All assertions passed" -ForegroundColor Green
