@@ -348,6 +348,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                             Code  : Get-CimInstance instead of Get-WmiObject, which PowerShell 7 does not have
 #                                             Feat  : Local sources are linked with junctions, which need no admin rights. Network
 #                                                     sources (UNC paths, network drives) still get symbolic links
+#                                             Bug   : While 7-Zip wrote the archive, progress read its size from the folder listing, which lags
+#                                                     for open files: it kept showing "Waiting for archive ..."
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -2858,7 +2860,9 @@ public class SevenZipOutput {
 			Start-Sleep -Milliseconds 2500
 			$Status = "Waiting for archive ..."
 			$ArchiveSize = 0
-			Get-ChildItem -Path $BkDestPath -Filter ("{0}*" -f $BkArchiveName) | ?{ !$_.PSIscontainer } | ForEach-Object { $ArchiveSize += $_.Length }
+			# The listing has the size an open file had when the folder entry was last updated, often 0 while
+			# 7-Zip writes: Refresh reads the current size of each archive file (and volume)
+			Get-ChildItem -Path $BkDestPath -Filter ("{0}*" -f $BkArchiveName) | ?{ !$_.PSIscontainer } | ForEach-Object { $_.Refresh(); $ArchiveSize += $_.Length }
 			If ( $ArchiveSize -gt 0 ) { $Status = "Archive Size {0,0:n2} MByte. so far ..." -f ($ArchiveSize / 1Mb) }
 			
 			# Log the 7-Zip error lines received so far, in order
