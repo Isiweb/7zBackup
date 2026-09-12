@@ -295,6 +295,7 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     but reported as removed: the root dir and its links stayed on disk
 #                                             Bug   : Notification addresses: valid ones (a@x.com, name+tag@, 1user@) were rejected,
 #                                                     invalid ones were not reported and still used. Now warned and dropped
+#                                             Bug   : A failed notification email showed an empty reason: now the underlying error
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1372,7 +1373,7 @@ Function Send-Notification {
 			} 
 			
 		Catch {
-			Write-Host (" Unable to send notification email : {0} `n " -f $_.Exception.Categoryinfo.Reason ) -ForeGroundColor Red
+			Write-Host (" Unable to send notification email : {0} `n " -f $_.Exception.GetBaseException().Message ) -ForeGroundColor Red
 			}
 			
 		Finally {
