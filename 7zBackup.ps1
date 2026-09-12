@@ -289,6 +289,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     compression, threads and solid were ignored. File ages accept integers
 #                                             Bug   : With a lowercase work drive letter subfolder paths became absolute: the archive
 #                                                     lost its folder structure and path directives stopped matching
+#                                             Bug   : Work drive check never ran (a parameter binding error aborted it) and its
+#                                                     NTFS test was inverted
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1650,9 +1652,9 @@ Function Validate-Variables {
 		($BkWorkDrive -ieq "") -or
 		($BkWorkDrive -is [array]) -or
 		($BkWorkDrive -notmatch "^[C-Z]{1}$") -or
-		(Test-Path ($BkWorkDrive + ":\") -eq $False) -or
+		((Test-Path ($BkWorkDrive + ":\")) -eq $False) -or
 		((Test-Path-Writable ($BkWorkDrive + ":\") "Directory") -eq $False) -or
-		((New-Object System.Io.DriveInfo($BkWorkDrive)).DriveFormat -ieq "NTFS")
+		((New-Object System.Io.DriveInfo($BkWorkDrive)).DriveFormat -ine "NTFS")
 	)	{ Write-Output "Missing or invalid --workdrive argument. Must be writable NTFS drive" }
 	
 	# --------------------------------------------------------------------------------------------------------------------------
