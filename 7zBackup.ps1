@@ -331,6 +331,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     Port 465 uses TLS on connect, --smtpssl requires STARTTLS on other ports
 #                                             Bug   : A sender given as an array (e.g. @(...) in the vars file) passed the check, but the
 #                                                     email failed: the joined value was a local copy, the script kept the array
+#                                             Bug   : The relay (--smtpserver) given as an array had the same problem: the joined
+#                                                     value was checked, the array was used
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -2121,7 +2123,7 @@ Function Validate-Variables {
 		# ----------------------------------------------------------------------------------------------------------------------
 		# Relay server - Checks
 		# ----------------------------------------------------------------------------------------------------------------------
-		If($BkSmtpRelay -is [array]) { $BkSmtpRelay = ($BkSmtpRelay -join "") }
+		If($BkSmtpRelay -is [array]) { Set-Variable -Name BkSmtpRelay -Value ($BkSmtpRelay -join "") -Scope Script }
 		If(
 			!(Test-Variable "BkSmtpRelay") -Or
 			(!(IsValidHostName $BkSmtpRelay) -And !(IsValidIPAddress $BkSmtpRelay))

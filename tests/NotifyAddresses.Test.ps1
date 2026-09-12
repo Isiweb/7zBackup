@@ -36,7 +36,7 @@ $selection = Join-Path $work "selection.txt"
 Set-Content -LiteralPath $selection -Value "includesource=$work\source|alias=Source"
 
 # Runs Validate-Variables with an otherwise valid setup and the given To address(es); returns the errors
-Function Invoke-Validation ($notifyTo, $from = "backup@example.com") {
+Function Invoke-Validation ($notifyTo, $from = "backup@example.com", $relay = "smtp.example.com") {
 	foreach ($name in "BkNotifyLog", "BkNotifyLogCc", "BkNotifyLogBcc") { Remove-Variable -Name $name -Scope Script }
 	$script:MyContext       = [hashtable]::Synchronized(@{ PSVer = [int]$PSVersionTable.PSVersion.Major; WinVer = @("10"); Logger = (New-Object System.Text.StringBuilder) })
 	$script:Counters        = @{ Warnings = 0 }
@@ -46,7 +46,7 @@ Function Invoke-Validation ($notifyTo, $from = "backup@example.com") {
 	$script:BkArchivePrefix = "test"
 	$script:BkNotifyLog     = $notifyTo
 	$script:BkSmtpFrom      = $from
-	$script:BkSmtpRelay     = "smtp.example.com"
+	$script:BkSmtpRelay     = $relay
 	Write-Output @(Validate-Variables)
 }
 
@@ -76,6 +76,14 @@ Assert ($errors.Count -eq 0) "no validation error [$($errors -join ' | ')]"
 # Send-Notification assigns the sender to MailMessage.From, which does not accept an array
 $fromError = $(Try { $message = New-Object System.Net.Mail.MailMessage; $message.From = $BkSmtpFrom; "" } Catch { $_.Exception.GetBaseException().Message })
 Assert ($fromError -eq "") "the checked sender can be used as MailMessage.From [$fromError]"
+
+Write-Host "`n Case: relay given as an array"
+$errors = @(Invoke-Validation "ok@example.com" "backup@example.com" @("smtp", ".example.com"))
+Assert ($errors.Count -eq 0) "no validation error for the joined smtp.example.com [$($errors -join ' | ')]"
+# Send-Notification assigns the relay to SmtpClient.Host: it must be the host that was checked
+$client = New-Object System.Net.Mail.SmtpClient
+$client.Host = $BkSmtpRelay
+Assert ($client.Host -eq "smtp.example.com") "the checked relay is the host used [$($client.Host)]"
 
 Remove-Item -LiteralPath $work -Recurse -Force
 
