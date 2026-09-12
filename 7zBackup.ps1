@@ -327,6 +327,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     issue #13) and silently did nothing on names with square brackets
 #                                             Feat  : New --mailkitpath: MailKit and its dependencies are loaded from that folder at
 #                                                     startup (issue #14). If loading fails, a warning is logged and SmtpClient is kept
+#                                             Feat  : Notification emails are sent with MailKit when --mailkitpath is set (issue #14)
+#                                                     Port 465 uses TLS on connect, --smtpssl requires STARTTLS on other ports
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -425,6 +427,7 @@ $helpText = @"
                        [--smtpuser < SMTPAuth's user >]					  
                        [--smtppass < SMTPAuth's password >]					  
                        [--smtpssl]	
+                       [--mailkitpath < folder with MailKit.dll >]
 
 
  ------------------------------------------------------------------------------
@@ -560,6 +563,12 @@ $helpText = @"
 
  --smtpssl     Wheather or not smtp transport requires ssl
                This is a switch argument
+
+ --mailkitpath Folder holding MailKit.dll, MimeKit.dll and their dependency
+               DLLs. When set, notification emails are sent with MailKit
+               instead of System.Net.Mail.SmtpClient. Port 465 uses TLS
+               on connect. If MailKit can not be loaded, a warning is
+               logged and SmtpClient is used
 
  --dry         Complete the process without creating any archive file
                nor changing/deleting/clearing any file
@@ -1327,6 +1336,65 @@ public static class MailKitFolderResolver {
 }
 
 # -----------------------------------------------------------------------------
+# Function 		: Get-MailKitSocketOption
+# -----------------------------------------------------------------------------
+# Description	: Chooses how MailKit secures the SMTP connection
+# Parameters    : [int]$port - The SMTP port
+#                 $ssl - Whether --smtpssl is set ($null when it is not)
+# Returns       : "SslOnConnect" for port 465, else "StartTls" with --smtpssl,
+#                 else "None" (same as SmtpClient)
+# -----------------------------------------------------------------------------
+Function Get-MailKitSocketOption {
+	param([int]$port, $ssl)
+	If($port -eq 465) { Return "SslOnConnect" }
+	If($ssl) { Return "StartTls" }
+	Return "None"
+}
+
+# -----------------------------------------------------------------------------
+# Function 		: Send-MailKitNotification
+# -----------------------------------------------------------------------------
+# Description	: Sends the notification email with MailKit (see Import-MailKit)
+#				  Same content as the SmtpClient path of Send-Notification
+# Parameters    : None
+# Returns       : --
+# -----------------------------------------------------------------------------
+Function Send-MailKitNotification {
+
+	$message = New-Object MimeKit.MimeMessage
+	$message.From.Add([MimeKit.MailboxAddress]::Parse($BkSmtpFrom))
+	foreach ($address in @($BkNotifyLog))    { $message.To.Add([MimeKit.MailboxAddress]::Parse($address)) }
+	foreach ($address in @($BkNotifyLogCc))  { If($address) { $message.Cc.Add([MimeKit.MailboxAddress]::Parse($address)) } }
+	foreach ($address in @($BkNotifyLogBcc)) { If($address) { $message.Bcc.Add([MimeKit.MailboxAddress]::Parse($address)) } }
+	$message.Subject = $BkMailSubject
+	If(($Counters.Criticals -gt 0)) { $message.Subject = "Critical ! $BkMailSubject" }
+	If(($Counters.Warnings -gt 0) -Or ($Counters.Criticals -gt 0)) { $message.Priority = [MimeKit.MessagePriority]::Urgent }
+
+	$body = New-Object MimeKit.BodyBuilder
+	$body.TextBody = $MyContext.Logger.ToString()
+	If ($BkNotifyExtra -ne "none") {
+		Get-ChildItem -Path $BkRootDir -Force | ? {!$_.PSIsContainer} | ForEach-Object {
+			If(($_.Length -gt 0) -And ($_.Name -notmatch "stats") -And ($_.Name -notmatch "README")) {
+				If($BkNotifyExtra -ieq "attach") { [void]$body.Attachments.Add($_.FullName) }
+				Else { $body.TextBody += ("`n`n{0}`n" -f $_.Name) + (Get-Content $_) }
+			}
+		}
+	}
+	$message.Body = $body.ToMessageBody()
+
+	$client = New-Object MailKit.Net.Smtp.SmtpClient
+	Try {
+		$client.Connect($BkSmtpRelay, $BkSmtpPort, [MailKit.Security.SecureSocketOptions](Get-MailKitSocketOption $BkSmtpPort $BkSmtpSSL))
+		If((Test-Variable "BkSmtpUser") -and (Test-Variable "BkSmtpPass")) { $client.Authenticate($BkSmtpUser, $BkSmtpPass) }
+		[void]$client.Send($message)
+		$client.Disconnect($True)
+	} Finally {
+		$client.Dispose()
+		$message.Dispose()
+	}
+}
+
+# -----------------------------------------------------------------------------
 # Function 		: Send-Notification
 # -----------------------------------------------------------------------------
 # Description	: Sends the notification email to given adressee
@@ -1363,6 +1431,11 @@ Function Send-Notification {
 		Try {
 		
 			If(!(Test-Variable "BkMailSubject")) { Set-Variable -name "BkMailSubject" -value ("7zBackup Report Host $Env:ComputerName") -scope Script }
+			If(Test-Variable "BkMailKitPath") {
+				Send-MailKitNotification
+				Write-Host " Done`n " -ForeGroundColor Green
+				Return
+			}
 			$SmtpClient = New-Object system.net.mail.smtpClient
 			$MailMessage = New-Object system.net.mail.mailmessage
 			

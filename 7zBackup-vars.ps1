@@ -526,6 +526,28 @@ Set-Variable -Name BkSmtpPort -Value ([int]25) -Scope 1
 # Set-Variable -Name BkSmtpSsl -Value ($False) -Scope 1
 
 # --------------------------------------------------------------------
+#  Variable       : BkMailKitPath
+#  Argument Name  : --mailkitpath
+#  Description    : Folder holding MailKit.dll, MimeKit.dll and their
+#                   dependency DLLs
+#  Values         : Full path to a folder
+#  Comments
+#  -------------------------------------------------------------------
+#  When set, notification emails are sent with MailKit instead of
+#  System.Net.Mail.SmtpClient. Port 465 uses TLS on connect; with
+#  BkSmtpSsl other ports require STARTTLS.
+#  Take each DLL from the lib\net48 folder (or the closest older .NET
+#  Framework folder) of the MailKit NuGet package and of every package
+#  it depends on. See README.md.
+#  If MailKit can not be loaded, a warning is logged and SmtpClient
+#  is used.
+#  -------------------------------------------------------------------
+#  Uncomment the following Set-Variable statement and set proper
+#  "<value>" if you want to set the value for the 7zBackup script.
+#  -------------------------------------------------------------------
+# Set-Variable -Name BkMailKitPath -Value "C:\Tools\MailKit" -Scope 1
+
+# --------------------------------------------------------------------
 #  Variable       : BkPreAction
 #  Argument Name  : --pre
 #  Description    : Sets the action to invoke before scanning process

@@ -34,6 +34,15 @@ It can help you cleaning up your directory structure from unwanted files ... in 
 * [PowerShell] 2.0 or better
 * [7-Zip] 9.2.0 or newest
 * [SysInternals] Junction Tool v. 1.0.5 ( not required if running Windows Vista / 7 / 2008)
+* [MailKit] 4.x, optional, for notification emails (needs .NET Framework 4.6.2 or newer)
+
+## Notification emails with MailKit (optional)
+By default notification emails are sent with System.Net.Mail.SmtpClient, which can not use TLS on connect (port 465). To send them with [MailKit] instead:
+1. From NuGet, take the `MailKit` package and every package it depends on (for MailKit 4.17: MimeKit, BouncyCastle.Cryptography, System.Buffers, System.Formats.Asn1, System.Memory, System.Numerics.Vectors, System.Runtime.CompilerServices.Unsafe, System.Threading.Tasks.Extensions, System.ValueTuple).
+2. Copy the DLL in each package's `lib\net48` folder (or the closest older .NET Framework folder) into one folder.
+3. Pass that folder with `--mailkitpath`, or set `BkMailKitPath` in 7zBackup-vars.ps1.
+
+Port 465 uses TLS on connect; with `--smtpssl` other ports require STARTTLS. If MailKit can not be loaded, a warning is logged and SmtpClient is used.
 
 ## Features
 * Backup your files in compressed archives by 7-zip (7z format or zip or tar)
@@ -45,6 +54,7 @@ It can help you cleaning up your directory structure from unwanted files ... in 
 * Can remove unwanted files during the scan process
 * Can remove unwanted directories during the scan process
 * Send log of operations via email also to Cc and Bcc
+* Optionally send emails with MailKit (TLS on connect for port 465)
 * Easily manageable like a script is
 * Easily schedule your backup operations (using task scheduler)
 
@@ -53,5 +63,6 @@ It can help you cleaning up your directory structure from unwanted files ... in 
    [PowerShell]: <https://technet.microsoft.com/en-us/scriptcenter>
    [7-Zip]: <http://www.7-zip.org/>
    [SysInternals]: <https://technet.microsoft.com/en-us/sysinternals/bb842062.aspx>
+   [MailKit]: <https://github.com/jstedfast/MailKit>
 
 
