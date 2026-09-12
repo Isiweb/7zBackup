@@ -23,10 +23,10 @@ It can help you cleaning up your directory structure from unwanted files ... in 
 * It can't replace any of your off-site backup strategies.
 
 ## Please read. Please ...
-**This script makes use of Junction points (or Symbolic Links for Windows Vista/7/2008) typically placed in C: drive (root). These NTFS objects are displayed as folders in your Explorer interface. If, for any reason, the script should interrupt abnormally, it's generated junction points or symbolic links,  may remain on disk. DO NOT USE WINDOWS EXPLORER TO DELETE JUNCTIONS OR SYMBOLIC LINKS AS IT TRAVERSES THE LINK AND MAY REMOVE YOUR REAL FILES AND FOLDERS.**
+**This script makes use of Junction points (Symbolic Links for network sources) typically placed in C: drive (root). These NTFS objects are displayed as folders in your Explorer interface. If, for any reason, the script should interrupt abnormally, it's generated junction points or symbolic links,  may remain on disk. DO NOT USE WINDOWS EXPLORER TO DELETE JUNCTIONS OR SYMBOLIC LINKS AS IT TRAVERSES THE LINK AND MAY REMOVE YOUR REAL FILES AND FOLDERS.**
 
-* To remove a junction point use junction.exe with the -d switch. 
-* To remove a symbolic link use the RD command line. If you are using Powershell, be more careful and use `cmd /c rmdir .\thesymlink'sname`.
+* To remove a junction point or a symbolic link use the RD command line. If you are using Powershell, be more careful and use `cmd /c rmdir .\thelinkname`.
+* On Windows XP / 2003 junction points are created with junction.exe: remove them with its -d switch.
 
 ## System Requirements
 * Windows XP, Windows Vista or better, Windows 2003 or better. (Might also work on Windows 2000 but there is some work to do for having PowerShell running on that platform)

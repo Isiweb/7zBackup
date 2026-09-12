@@ -346,6 +346,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     were joined into one and lines still queued when 7-Zip exited were lost
 #                                             Speed : Folders are listed with DirectoryInfo instead of Get-ChildItem (about 27 to 1 us per item)
 #                                             Code  : Get-CimInstance instead of Get-WmiObject, which PowerShell 7 does not have
+#                                             Feat  : Local sources are linked with junctions, which need no admin rights. Network
+#                                                     sources (UNC paths, network drives) still get symbolic links
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -818,9 +820,22 @@ Function Make-Junction {
 }
 
 # -----------------------------------------------------------------------------
+# Function 		: Test-NetworkPath
+# -----------------------------------------------------------------------------
+# Description	: Tells whether a path is on the network: UNC path or network drive
+# Parameters    : [string]$path - Full path
+# Returns       : $True / $False
+# -----------------------------------------------------------------------------
+Function Test-NetworkPath ([string]$path) {
+	If($path.StartsWith("\\")) { Return $True }
+	Try { Return ((New-Object System.IO.DriveInfo([System.IO.Path]::GetPathRoot($path))).DriveType -eq [System.IO.DriveType]::Network) } Catch { Return $False }
+}
+
+# -----------------------------------------------------------------------------
 # Function 		: Make-SymLink
 # -----------------------------------------------------------------------------
-# Description	: Creates a Symbolic Link to Target (only available for WinVer 6+)
+# Description	: Links a path to Target: a junction for a local target, a symbolic
+#				  link for a network target (only available for WinVer 6+)
 # Parameters    : [string]jPath    - Full path to the name of the junction
 #				  [string]jTarget  - Full path to the target 
 # Returns       : $True / $False
@@ -836,7 +851,9 @@ Function Make-SymLink {
 	If(Test-Path $jTarget) {
 	
 		# Create Link
-		cmd /c ("MKLINK /D `"{0}`" `"{1}`"" -f $jPath, $jTarget) | Out-Null
+		# Junctions need no admin rights, but can only point to local volumes
+		$linkType = If(Test-NetworkPath $jTarget) { "/D" } Else { "/J" }
+		cmd /c ("MKLINK {0} `"{1}`" `"{2}`"" -f $linkType, $jPath, $jTarget) | Out-Null
 		Start-Sleep -Milliseconds 10
 		
 		# Test is present
@@ -866,7 +883,7 @@ Function New-RootDir {
 		If([int]$MyContext.WinVer[0] -lt 6 ) {
 			New-Item (Join-Path -Path $BkRootDir -ChildPath "__README__PLEASE__README__.txt") -type File -value "This directory contains Junctions.`nDO NOT DELETE THIS DIRECTORY AND IT'S CONTENTS USING WINDOWS EXPLORER.`nUse Junction -d to delete junctions and then safely delete the directory." | Out-Null
 		} Else {
-			New-Item (Join-Path -Path $BkRootDir -ChildPath "__README__PLEASE__README__.txt") -type File -value "This directory contains Symbolic Links.`nDO NOT DELETE THIS DIRECTORY AND IT'S CONTENTS USING WINDOWS EXPLORER.`nUse RD command delete symbolic links and then safely delete the directory, use cmd /c rmdir <thesymlink'sname> in case of using Powershell." | Out-Null
+			New-Item (Join-Path -Path $BkRootDir -ChildPath "__README__PLEASE__README__.txt") -type File -value "This directory contains junctions or symbolic links.`nDO NOT DELETE THIS DIRECTORY AND IT'S CONTENTS USING WINDOWS EXPLORER.`nUse the RD command to delete the links and then safely delete the directory, use cmd /c rmdir <thesymlink'sname> in case of using Powershell." | Out-Null
 		}
 		If(!$?) {
 			Write-Output ("Can't write into {0}. Check permissions." -f $path)
@@ -2407,8 +2424,8 @@ $BkSelectionContents | Where-Object {$_ -imatch "^includesource=(.*)\|alias=(.*)
 				# Create the new junction for Windows previous to vista
 				If(!(Make-Junction (Join-Path -Path $BkRootDir -ChildPath $alias) $target)) { Trace "   Failed to create Junction [$alias] to [$target]"} Else { $BkSources.Add($alias, $target) }
 			} Else {
-				# Create the new symbolic link for Windows Vista or newer
-				If(!(Make-SymLink (Join-Path -Path $BkRootDir -ChildPath $alias) $target)) { Trace "   Failed to create Symbolic Link [$alias] to [$target]"} Else { $BkSources.Add($alias, $target) }
+				# Create the link for Windows Vista or newer: a junction for a local target
+				If(!(Make-SymLink (Join-Path -Path $BkRootDir -ChildPath $alias) $target)) { Trace "   Failed to create link [$alias] to [$target]"} Else { $BkSources.Add($alias, $target) }
 			}
 			
 		}

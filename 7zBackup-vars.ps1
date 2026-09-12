@@ -318,8 +318,8 @@ Set-Variable -Name BkArchiveType -Value "7z" -Scope 1
 #
 #  PLEASE NOTE 
 #  If you're running the script on Vista / 7 / 2008 this variable
-#  and it's value is completely ignored. Instead of junctions
-#  Symbolic Links are used (MKLINK).
+#  and it's value is completely ignored. MKLINK creates junctions
+#  instead (symbolic links for network sources).
 #  -------------------------------------------------------------------
 #  Uncomment the following Set-Variable statement and set proper
 #  "<value>" if you want to set the value for the 7zBackup script.
