@@ -308,6 +308,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     nofollowjunctions log named the parent instead of the skipped junction
 #                                             Bug   : Scan counted one folder too many (extra call without a folder) and the empty
 #                                                     Compress-Detail.txt was added to the archive (misspelled name filter)
+#                                             Bug   : Log messages printed ".Exception.Message" and ".Name" literally, and a 7-Zip
+#                                                     command line error printed an undefined variable instead of the arguments
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -593,7 +595,7 @@ Function Do-PostAction {
 				Trace " $_"
 			}
 		} Catch {
-			Trace " $_.Exception.Message"
+			Trace (" {0}" -f $_.Exception.Message)
 		}
 		Trace " ------------------------------------------------------------------------------"
 		Trace " "
@@ -2201,7 +2203,7 @@ If(Test-Variable "BkPreAction") {
 			Trace " $_"
 		}
 	} Catch {
-		Trace " $_.Exception.Message"
+		Trace (" {0}" -f $_.Exception.Message)
 	}
 	Trace " ------------------------------------------------------------------------------"
 	Trace " "
@@ -2804,7 +2806,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 							
 						} Else {
 							Remove-Item -LiteralPath (Join-Path $BkDestPath $_.Name) -ErrorAction "SilentlyContinue" | Out-Null
-							if ($?) { Trace (" Removed  : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) ) } Else { Trace " WARNING Failed to remove $_.Name"}
+							if ($?) { Trace (" Removed  : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) ) } Else { Trace (" WARNING Failed to remove {0}" -f $_.Name)}
 						}
 					}
 					Trace " ------------------------------------------------------------------------------"
@@ -2853,7 +2855,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 				$Counters.Criticals += 1
 				Trace " " 
 				Trace " Cancelled ! 7-Zip has been invoked with a wrong command line." 
-				Trace " $cmdLine" 
+				Trace (" {0}" -f $oProcessStartInfo.Arguments) 
 				Trace " NO VALID ARCHIVE HAS BEEN CREATED" 
 				If(Test-Path -Path $BkDestFile -PathType Leaf) { Remove-Item -LiteralPath $BkDestFile -Force | Out-Null }
 			} ElseIf (($Bk7ZipRetc -eq 8)) {
