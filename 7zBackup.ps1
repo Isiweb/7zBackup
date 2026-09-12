@@ -293,6 +293,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     NTFS test was inverted
 #                                             Bug   : Links with spaces or square brackets in the alias were not removed at cleanup
 #                                                     but reported as removed: the root dir and its links stayed on disk
+#                                             Bug   : Notification addresses: valid ones (a@x.com, name+tag@, 1user@) were rejected,
+#                                                     invalid ones were not reported and still used. Now warned and dropped
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -704,7 +706,7 @@ Function Clear-Script {
 # -----------------------------------------------------------------------------
 Function IsValidEmailAddress { 
 	param([string]$emailAddress = $(throw "You must provide an address"))
-	Write-Output ($emailAddress -match "^[a-zA-Z][\w\.-]*[a-zA-Z0-9]@[a-zA-Z0-9][\w\.-]*[a-zA-Z0-9]\.[a-zA-Z][a-zA-Z\.]*[a-zA-Z]$")
+	Write-Output ($emailAddress -match "^[a-zA-Z0-9]([\w\.+-]*[a-zA-Z0-9])?@[a-zA-Z0-9]([\w\.-]*[a-zA-Z0-9])?\.[a-zA-Z][a-zA-Z\.]*[a-zA-Z]$")
 }	
 
 # -----------------------------------------------------------------------------
@@ -1923,14 +1925,15 @@ Function Validate-Variables {
 		# ----------------------------------------------------------------------------------------------------------------------
 		If(!($BkNotifyLog -is [array])) { 
 			Set-Variable -Name NotifyRecipients -value @($BkNotifyLog) -scope Script
-			$NotifyRecipients | Where-Object {!(IsValidEmailAddress $_)} | Write-Output ("Invalid --notify address {0}" -f $_)
-			$BkNotifyLog = @($NotifyRecipients | Where-Object {IsValidEmailAddress $_}) 
+			$NotifyRecipients | Where-Object {$_ -and !(IsValidEmailAddress $_)} | ForEach-Object { Trace (" Warning : Invalid --notify address {0} ignored" -f $_); $Counters.Warnings++ }
+			Set-Variable -Name BkNotifyLog -Value @($NotifyRecipients | Where-Object {IsValidEmailAddress $_}) -Scope Script 
 			Remove-Variable -Name NotifyRecipients -Scope Script
 		} Else {
-			$BkNotifyLog | Where-Object {!(IsValidEmailAddress $_)} | Write-Output ("Invalid --notify address {0}" -f $_)
-			$BkNotifyLog = @($BkNotifyLog | Where-Object {IsValidEmailAddress $_}) 
+			$BkNotifyLog | Where-Object {$_ -and !(IsValidEmailAddress $_)} | ForEach-Object { Trace (" Warning : Invalid --notify address {0} ignored" -f $_); $Counters.Warnings++ }
+			Set-Variable -Name BkNotifyLog -Value @($BkNotifyLog | Where-Object {IsValidEmailAddress $_}) -Scope Script 
 		}
 		If($BkNotifyLog.Count -lt 1) {
+			Trace " Warning : No valid --notify address left: no notification will be sent"; $Counters.Warnings++
 			Remove-Variable -Name BkNotifyLog -Scope Script
 		}
 
@@ -1939,12 +1942,12 @@ Function Validate-Variables {
 		# ----------------------------------------------------------------------------------------------------------------------
 		If(!($BkNotifyLogCc -is [array])) { 
 			Set-Variable -Name NotifyRecipients -value @($BkNotifyLogCc) -scope Script
-			$NotifyRecipients | Where-Object {!(IsValidEmailAddress $_)} | Write-Output ("Invalid --notifyCc address {0}" -f $_)
-			$BkNotifyLogCc = @($NotifyRecipients | Where-Object {IsValidEmailAddress $_}) 
+			$NotifyRecipients | Where-Object {$_ -and !(IsValidEmailAddress $_)} | ForEach-Object { Trace (" Warning : Invalid --notifyCc address {0} ignored" -f $_); $Counters.Warnings++ }
+			Set-Variable -Name BkNotifyLogCc -Value @($NotifyRecipients | Where-Object {IsValidEmailAddress $_}) -Scope Script 
 			Remove-Variable -Name NotifyRecipients -Scope Script
 		} Else {
-			$BkNotifyLogCc | Where-Object {!(IsValidEmailAddress $_)} | Write-Output ("Invalid --notifyCc address {0}" -f $_)
-			$BkNotifyLogCc = @($BkNotifyLogCc | Where-Object {IsValidEmailAddress $_}) 
+			$BkNotifyLogCc | Where-Object {$_ -and !(IsValidEmailAddress $_)} | ForEach-Object { Trace (" Warning : Invalid --notifyCc address {0} ignored" -f $_); $Counters.Warnings++ }
+			Set-Variable -Name BkNotifyLogCc -Value @($BkNotifyLogCc | Where-Object {IsValidEmailAddress $_}) -Scope Script 
 		}
 		If($BkNotifyLogCc.Count -lt 1) {
 			Remove-Variable -Name BkNotifyLogCc -Scope Script
@@ -1955,12 +1958,12 @@ Function Validate-Variables {
 		# ----------------------------------------------------------------------------------------------------------------------
 		If(!($BkNotifyLogBcc -is [array])) { 
 			Set-Variable -Name NotifyRecipients -value @($BkNotifyLogBcc) -scope Script
-			$NotifyRecipients | Where-Object {!(IsValidEmailAddress $_)} | Write-Output ("Invalid --notifyBcc address {0}" -f $_)
-			$BkNotifyLogBcc = @($NotifyRecipients | Where-Object {IsValidEmailAddress $_}) 
+			$NotifyRecipients | Where-Object {$_ -and !(IsValidEmailAddress $_)} | ForEach-Object { Trace (" Warning : Invalid --notifyBcc address {0} ignored" -f $_); $Counters.Warnings++ }
+			Set-Variable -Name BkNotifyLogBcc -Value @($NotifyRecipients | Where-Object {IsValidEmailAddress $_}) -Scope Script 
 			Remove-Variable -Name NotifyRecipients -Scope Script
 		} Else {
-			$BkNotifyLogBcc | Where-Object {!(IsValidEmailAddress $_)} | Write-Output ("Invalid --notifyBcc address {0}" -f $_)
-			$BkNotifyLogBcc = @($BkNotifyLogBcc | Where-Object {IsValidEmailAddress $_}) 
+			$BkNotifyLogBcc | Where-Object {$_ -and !(IsValidEmailAddress $_)} | ForEach-Object { Trace (" Warning : Invalid --notifyBcc address {0} ignored" -f $_); $Counters.Warnings++ }
+			Set-Variable -Name BkNotifyLogBcc -Value @($BkNotifyLogBcc | Where-Object {IsValidEmailAddress $_}) -Scope Script 
 		}
 		If($BkNotifyLogBcc.Count -lt 1) {
 			Remove-Variable -Name BkNotifyLogBcc -Scope Script
