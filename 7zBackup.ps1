@@ -285,6 +285,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     warnings: their writer used an undefined variable
 #                                             Bug   : 7-Zip warnings (missing or unreadable files) were never logged nor counted:
 #                                                     the match expected drive paths. Items are now matched against the catalog
+#                                             Bug   : Selection file directives maxfilesize, minfilesize, maxfileage, minfileage,
+#                                                     compression, threads and solid were ignored. File ages accept integers
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1698,21 +1700,21 @@ Function Validate-Variables {
 			$BkSelectionContents | Where-Object {$_ -match "^nofollowjunctions$"} | ForEach-Object { Set-Variable -name "BkNoFollowJunctions" -value $True -scope Script }
 			
 			# Look whether selection contents sets max/min file sizes
-			$BkSelectionContents | ? {$_ -match "^maxfilesize=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMaxFileSize" -Value $_.Value}
-			$BkSelectionContents | ? {$_ -match "^minfilesize=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMinFileSize" -Value $_.Value}
+			$BkSelectionContents | ? {$_ -match "^maxfilesize=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMaxFileSize" -Value $_.Value -Scope Script}
+			$BkSelectionContents | ? {$_ -match "^minfilesize=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMinFileSize" -Value $_.Value -Scope Script}
 
 			# Look whether selection contents sets max/min file ages
-			$BkSelectionContents | ? {$_ -match "^maxfileage=\d+(\,|\.)\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMaxFileAge" -Value $_.Value}
-			$BkSelectionContents | ? {$_ -match "^minfileage=\d+(\,|\.)\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMinFileAge" -Value $_.Value}
+			$BkSelectionContents | ? {$_ -match "^maxfileage=\d+((\,|\.)\d+)?"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMaxFileAge" -Value $_.Value -Scope Script}
+			$BkSelectionContents | ? {$_ -match "^minfileage=\d+((\,|\.)\d+)?"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMinFileAge" -Value $_.Value -Scope Script}
 			
 			# Look for compression
-			$BkArchiveCompression | ? {$_ -match "^compression=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveCompression" -Value $_.Value}
+			$BkSelectionContents | ? {$_ -match "^compression=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveCompression" -Value $_.Value -Scope Script}
 
 			# Look for threads
-			$BkArchiveThreads | ? {$_ -match "^threads=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveThreads" -Value $_.Value}
+			$BkSelectionContents | ? {$_ -match "^threads=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveThreads" -Value $_.Value -Scope Script}
 			
-			# Look for Solid mode
-			$BkArchiveSolid | ? {$_ -match "^solid=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveSolid" -Value $_.Value}
+			# Look for Solid mode: solid=0 turns it off, solid=1 on
+			$BkSelectionContents | ? {$_ -match "^solid=[01]$"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1) -eq "1"}} | ForEach-Object {Set-Variable -Name "BkArchiveSolid" -Value $_.Value -Scope Script}
 
 		}
 	}
