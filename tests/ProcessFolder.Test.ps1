@@ -86,6 +86,7 @@ foreach ($dryRun in $False, $True) {
 	$source = Join-Path $work "source"
 	New-Item -ItemType Directory $source -Force | Out-Null
 	Set-Content -LiteralPath "$source\junk.tmp" -Value "junk"
+	Set-Content -LiteralPath "$source\junk[1].tmp" -Value "junk"
 	Set-Content -LiteralPath "$source\keep.txt" -Value "keep"
 	Set-Content -LiteralPath "$source\keep2.txt" -Value "keep two"
 
@@ -95,8 +96,10 @@ foreach ($dryRun in $False, $True) {
 		Assert (Test-Path -LiteralPath "$source\junk.tmp")  "dry run: matching file stays on disk"
 	} Else {
 		Assert (!(Test-Path -LiteralPath "$source\junk.tmp")) "matching file is deleted from source"
+		Assert (!(Test-Path -LiteralPath "$source\junk[1].tmp")) "matching file with [ ] in its name is deleted from source"
 	}
 	Assert (!($included -contains "Alias\junk.tmp"))  "matching file is not selected for the archive"
+	Assert (!($included -contains "Alias\junk[1].tmp")) "matching file with [ ] in its name is not selected"
 	Assert (Test-Path -LiteralPath "$source\keep.txt") "other file stays on disk"
 	Assert ($included -contains "Alias\keep.txt")      "other file is selected"
 	Assert ($Counters.FoldersDone -eq 1)               "the only folder is scanned once [$($Counters.FoldersDone)]"

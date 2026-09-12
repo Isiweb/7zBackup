@@ -51,6 +51,10 @@ $commands = @($assignments | ForEach-Object { $_.FindAll({ param($n) $n -is [Sys
 Assert ($assignments.Count -ge 1)                                         "precondition, notArchived assignment found"
 Assert (@($commands | Where-Object { $_ -eq "Where-Object" }).Count -eq 0) "no Where-Object pipeline over the catalog [$(($commands | Sort-Object -Unique) -join ', ')]"
 
+Write-Host "`n Case: ProcessFolder, folder listing"
+$commands = @((Get-Function "ProcessFolder").FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $True) | ForEach-Object { $_.GetCommandName() })
+Assert (@($commands | Where-Object { $_ -eq "Get-ChildItem" }).Count -eq 0) "no Get-ChildItem: about 27 us per listed item [$(($commands | Sort-Object -Unique) -join ', ')]"
+
 Write-Host ""
 If($Failures -gt 0) { Write-Host " $Failures assertion(s) failed" -ForegroundColor Red; exit 1 }
 Write-Host " All assertions passed" -ForegroundColor Green

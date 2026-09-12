@@ -344,6 +344,7 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     Import-Csv / Group-Object pass (about 36 us per file) are gone
 #                                             Bug   : 7-Zip output was read by PowerShell events: lines came out of order, stderr lines
 #                                                     were joined into one and lines still queued when 7-Zip exited were lost
+#                                             Speed : Folders are listed with DirectoryInfo instead of Get-ChildItem (about 27 to 1 us per item)
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1079,25 +1080,22 @@ Function ProcessFolder ($thisFolder) {
 	# Status
 	Trace-Progress ("Folder {0}" -f $thisFolder.RealName) "Loading ... " ("Selected {0,0:n0} out of {1,0:n0} files in {2,0:n0} folders. {3,0:n2} MBytes to backup" -f  $Counters.FilesSelected, $Counters.FilesProcessed, $Counters.FoldersDone, ($Counters.BytesSelected / 1MB ))
 	
-	Remove-Variable childItemsScanErrors -Scope Local | Out-Null
-	$childItems = @(Get-ChildItem -LiteralPath $thisFolder.RelativeName -Force -ErrorVariable childItemsScanErrors)
-	If($childItemsScanErrors) {
-		for ($i=0; $i -lt $childItemsScanErrors.count; $i++) {
-			$realTargetName = [string]$childItemsScanErrors[$i].CategoryInfo.TargetName
-			# Strip the root dir (any case), then only the leading alias: a folder name may contain the alias
-			If($realTargetName.StartsWith($BkRootDir + "\", [System.StringComparison]::OrdinalIgnoreCase)) { $realTargetName = $realTargetName.Substring($BkRootDir.Length + 1) }
-			If($realTargetName.StartsWith($thisFolder.ContainerAlias, [System.StringComparison]::OrdinalIgnoreCase)) { $realTargetName = $realTargetName.Substring($thisFolder.ContainerAlias.Length) }
-			$realTargetName = [string](Join-Path -Path $BkSources[$thisFolder.ContainerAlias] -ChildPath $realTargetName)
-			$SWriters.Exceptions.WriteLine(("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childItemsScanErrors[$i].CategoryInfo.Reason, $realTargetName))
-			Trace (" Exception id {0} on {1} " -f $Counters.Exceptions, $realTargetName)
-		}
+	# DirectoryInfo, not Get-ChildItem (about 27 us per listed item). It needs a full path: the process
+	# directory is not the PowerShell location. An access error fails the whole folder, as before
+	$childItems = @()
+	$childItemsScanError = $null
+	Try { $childItems = @(([System.IO.DirectoryInfo]([System.IO.Path]::Combine($BkRootDir, $thisFolder.RelativeName))).GetFileSystemInfos()) }
+	Catch { $childItemsScanError = $_.Exception.GetBaseException() }
+	If($childItemsScanError) {
+		$SWriters.Exceptions.WriteLine(("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childItemsScanError.GetType().Name, $thisFolder.RealName))
+		Trace (" Exception id {0} on {1} " -f $Counters.Exceptions, $thisFolder.RealName)
 	}
 
 	# Status
 	Trace-Progress ("Folder {0}" -f $thisFolder.RealName) "Scanning ... " ("Selected {0,0:n0} out of {1,0:n0} files in {2,0:n0} folders. {3,0:n2} MBytes to backup" -f  $Counters.FilesSelected, $Counters.FilesProcessed, $Counters.FoldersDone, ($Counters.BytesSelected / 1MB ))
 	
 	# If it is an empty directory
-	If($scanThisPathForRecursion -and (!$childItems.Count) -and ($BkKeepEmptyDirs -eq $True) -and !($childItemsScanErrors)) {
+	If($scanThisPathForRecursion -and (!$childItems.Count) -and ($BkKeepEmptyDirs -eq $True) -and !($childItemsScanError)) {
 		
 		# Older versions of 7zip require at least one file to save a folder
 		# Newer versions will simply create the folder
@@ -1118,7 +1116,7 @@ Function ProcessFolder ($thisFolder) {
 	
 	# Process Files Within The Container
 	If($scanThisPathForFiles) {
-		$childFiles = @($childItems | ? {!$_.PSIsContainer})
+		$childFiles = @($childItems | ? { $_ -is [System.IO.FileInfo] })
 		If($childFiles.Count) {
 			for ($i=0; $i -lt $childFiles.Count; $i++) {
 				
@@ -1131,7 +1129,7 @@ Function ProcessFolder ($thisFolder) {
 				If(($matchcleanupfiles) -and ($childFile.Name -match $matchcleanupfiles)) {
 					If(!$BkDryRun) {
 						Trace (" Removing F {0} " -f $childFileRealName)
-						$childFile | Remove-Item -Force -ErrorVariable childFileRemoveError | Out-Null
+						Remove-Item -LiteralPath $childFile.FullName -Force -ErrorVariable childFileRemoveError | Out-Null
 						if (!$?) {
 							$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childFileRemoveError.CategoryInfo.Reason, $childFileRemoveError.CategoryInfo.TargetName))
 							Trace (" Exception id {0} on {1} " -f $Counters.Exceptions, $childFileRealName)
@@ -1201,7 +1199,7 @@ Function ProcessFolder ($thisFolder) {
 	
 	# Process Directories Within The Container
 	If($scanThisPathForRecursion -And (!(Check-CTRLCRequest -eq $True))) {
-		$childFolders = @($childItems | ? {$_.PSIsContainer})
+		$childFolders = @($childItems | ? { $_ -is [System.IO.DirectoryInfo] })
 		If($childFolders.Count) {
 			# Queue children right after this folder, in order. Skipped junctions take no slot
 			$insertAt = $catalogFoldersIndex + 1
