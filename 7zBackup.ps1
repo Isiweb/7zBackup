@@ -291,6 +291,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     lost its folder structure and path directives stopped matching
 #                                             Bug   : Work drive check never ran (a parameter binding error aborted it) and its
 #                                                     NTFS test was inverted
+#                                             Bug   : Links with spaces or square brackets in the alias were not removed at cleanup
+#                                                     but reported as removed: the root dir and its links stayed on disk
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1246,17 +1248,14 @@ Function Remove-SymLink  {
 	param([string]$jPath = $(throw "You must provide a path to the Link")) 
 
 	# Check Junction Path exist otherwise we have nothing to delete
-	If((Test-Path $jPath)) {
+	If((Test-Path -LiteralPath $jPath)) {
 		
-		# Now we have to check if source contains spaces
-		If(($jPath.Contains(" "))) { $jPath = """$jPath""" }
-
 		# Remove the Link
 		cmd /c ("RD `"{0}`"" -f $jPath)
 		Start-Sleep -Milliseconds 10
 		
 		# Test is no more present !!
-		Write-Output ((Test-Path -Path $jPath) -eq $False)
+		Write-Output ((Test-Path -LiteralPath $jPath) -eq $False)
 		Return
 		
 	}
