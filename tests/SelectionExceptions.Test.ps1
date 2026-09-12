@@ -49,7 +49,7 @@ foreach ($withDenied in $True, $False) {
 	# State the script body has prepared before this range
 	$BkType    = "full"
 	$BkSources = @{ Docs = $source }
-	$Counters  = @{ Exclusions = 0; Warnings = 0; Exceptions = 0; Criticals = 0; FoldersDone = 0; FilesProcessed = 0; FilesSelected = 0; BytesSelected = [int64]0; BytesAvailable = [int64]0; PlaceHolders = @() }
+	$Counters  = @{ Exclusions = 0; Warnings = 0; Exceptions = 0; Criticals = 0; FoldersDone = 0; FilesProcessed = 0; FilesSelected = 0; BytesSelected = [int64]0; BytesAvailable = [int64]0; PlaceHolders = @(); Extensions = @{} }
 	$SWriters  = @{}
 	$MyContext = [hashtable]::Synchronized(@{ Cancelling = $False; Logger = (New-Object System.Text.StringBuilder); StartDir = $env:TEMP; WinVer = @("10") })
 	Set-Location -Path $BkRootDir

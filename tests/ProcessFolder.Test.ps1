@@ -38,11 +38,11 @@ Function Invoke-Scan ([string]$work, [string]$source, [switch]$lowerCaseDrive, [
 	cmd /c "mklink /J `"$script:BkRootDir\$aliasName`" `"$source`"" | Out-Null
 
 	$script:BkSources = @{ $aliasName = $source }
-	$script:Counters  = @{ Exclusions = 0; Exceptions = 0; FoldersDone = 0; FilesProcessed = 0; FilesSelected = 0; BytesSelected = [int64]0; PlaceHolders = @() }
+	$script:Counters  = @{ Exclusions = 0; Exceptions = 0; FoldersDone = 0; FilesProcessed = 0; FilesSelected = 0; BytesSelected = [int64]0; PlaceHolders = @(); Extensions = @{} }
 	$script:MyContext = [hashtable]::Synchronized(@{ Cancelling = $False; Logger = (New-Object System.Text.StringBuilder); SelectionStart = (Get-Date) })
 	$inclusions       = Join-Path $work "Catalog-Include.txt"
 	$script:SWriters  = @{ Inclusions = (New-Object System.IO.StreamWriter($inclusions, $False, [System.Text.Encoding]::UTF8)) }
-	foreach ($name in "Exclusions", "Exceptions", "Stats") { $script:SWriters[$name] = New-Object System.IO.StreamWriter((Join-Path $work "$name.txt"), $False, [System.Text.Encoding]::ASCII) }
+	foreach ($name in "Exclusions", "Exceptions") { $script:SWriters[$name] = New-Object System.IO.StreamWriter((Join-Path $work "$name.txt"), $False, [System.Text.Encoding]::ASCII) }
 
 	$script:catalogFolders      = New-Object System.Collections.ArrayList
 	$script:catalogFoldersIndex = 0
@@ -87,6 +87,7 @@ foreach ($dryRun in $False, $True) {
 	New-Item -ItemType Directory $source -Force | Out-Null
 	Set-Content -LiteralPath "$source\junk.tmp" -Value "junk"
 	Set-Content -LiteralPath "$source\keep.txt" -Value "keep"
+	Set-Content -LiteralPath "$source\keep2.txt" -Value "keep two"
 
 	$BkType = "full"; $BkNoFollowJunctions = $False; $BkDryRun = $dryRun; $matchcleanupfiles = '\.tmp$'
 	$included = @(Invoke-Scan $work $source)
@@ -99,6 +100,10 @@ foreach ($dryRun in $False, $True) {
 	Assert (Test-Path -LiteralPath "$source\keep.txt") "other file stays on disk"
 	Assert ($included -contains "Alias\keep.txt")      "other file is selected"
 	Assert ($Counters.FoldersDone -eq 1)               "the only folder is scanned once [$($Counters.FoldersDone)]"
+	# @(): with no totals, indexing $null would throw and skip the Assert silently
+	$txtTotals = @($Counters.Extensions[".txt"])
+	$txtBytes = (Get-Item -LiteralPath "$source\keep.txt").Length + (Get-Item -LiteralPath "$source\keep2.txt").Length
+	Assert (($txtTotals.Count -eq 2) -and ($txtTotals[0] -eq 2) -and ($txtTotals[1] -eq $txtBytes)) "statistics count the 2 .txt files and their $txtBytes bytes [$($txtTotals -join ', ')]"
 
 	Remove-Item -LiteralPath $work -Recurse -Force
 }

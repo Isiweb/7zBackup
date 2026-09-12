@@ -340,6 +340,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     (about 360 to 65 us per file), and keeps listing entries as plain strings
 #                                             Speed : File age filters subtract dates instead of calling New-Timespan per file, and the
 #                                                     NOT ARCHIVED check loops over the catalog instead of piping it
+#                                             Speed : Selection statistics are summed during the scan: Catalog-Stats.csv and its
+#                                                     Import-Csv / Group-Object pass (about 36 us per file) are gone
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1186,8 +1188,9 @@ Function ProcessFolder ($thisFolder) {
 				$Counters.FilesSelected++ ; 
 				$Counters.BytesSelected += $childFile.Length ;
 				$SWriters.Inclusions.WriteLine([System.IO.Path]::Combine($thisFolder.RelativeName, $childFile.Name))
-				# Save Catalog Stats
-				$SWriters.Stats.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.FilesSelected,$childFile.Extension,$childFile.Length ))
+				# Selection statistics by extension: files and bytes
+				$extensionTotals = $Counters.Extensions[$childFile.Extension]
+				If($extensionTotals) { $extensionTotals[0]++; $extensionTotals[1] += $childFile.Length } Else { $Counters.Extensions[$childFile.Extension] = @(1, [int64]$childFile.Length) }
 				
 				
 			}
@@ -2281,6 +2284,7 @@ $Counters.Warnings = 0
 $Counters.Exceptions = 0
 $Counters.Criticals = 0
 $Counters.FoldersDone = 0
+$Counters.Extensions = @{}
 $Counters.FilesProcessed = 0
 $Counters.FilesSelected = 0
 $Counters.BytesSelected = [int64]0
@@ -2551,7 +2555,6 @@ $BkSelectionInfo  = Join-Path $BkRootDir "Selection-Info.txt" ; New-Item $BkSele
 $BkSelectionExcpt = Join-Path $BkRootDir "Selection-Excpt.csv"; New-Item $BkSelectionExcpt -type File -Force | Out-Null; "Id`tException`tTarget" | Out-File $BkSelectionExcpt -encoding ASCII -append
 $BkCatalogInclude = Join-Path $BkRootDir "Catalog-Include.txt"; New-Item $BkCatalogInclude -type File -Force | Out-Null
 $BkCatalogExclude = Join-Path $BkRootDir "Catalog-Exclude.csv"; New-Item $BkCatalogExclude -type File -Force | Out-Null; "Id`tDirective`tType`tTarget" | Out-File $BkCatalogExclude -encoding ASCII -append
-$BkCatalogStats   = Join-Path $BkRootDir "Catalog-Stats.csv"  ; New-Item $BkCatalogStats   -type File -Force | Out-Null; "Id`tExtension`tSize" | Out-File $BkCatalogStats -encoding ASCII -append
 $BkCompressDetail = Join-Path $BkRootDir "Compress-Detail.txt"; New-Item $BkCompressDetail -type File -Force | Out-Null
 
 # --------------------------------------------------------------------
@@ -2562,7 +2565,6 @@ $BkCompressDetail = Join-Path $BkRootDir "Compress-Detail.txt"; New-Item $BkComp
 $SWriters.Inclusions = New-Object -TypeName System.IO.StreamWriter($BkCatalogInclude, [String]$True, [System.Text.Encoding]::UTF8)
 $SWriters.Exclusions = New-Object -TypeName System.IO.StreamWriter($BkCatalogExclude, [String]$True, [System.Text.Encoding]::ASCII)
 $SWriters.Exceptions = New-Object -TypeName System.IO.StreamWriter($BkSelectionExcpt, [String]$True, [System.Text.Encoding]::ASCII)
-$SWriters.Stats = New-Object -TypeName System.IO.StreamWriter($BkCatalogStats, [String]$True, [System.Text.Encoding]::ASCII)
 $SWriters.GetEnumerator() | ForEach-Object { $_.Value.AutoFlush = $True }
 
 Trace " "
@@ -2610,7 +2612,8 @@ If($Counters.FilesSelected -gt 0) {
 			$Counters.FilesSelected++ ; 
 			$Counters.BytesSelected += $_.Length ;
 			$SWriters.Inclusions.WriteLine($_.Name)
-			$SWriters.Stats.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.FilesSelected,$_.Extension,[string]$_.Length ))
+			$extensionTotals = $Counters.Extensions[$_.Extension]
+			If($extensionTotals) { $extensionTotals[0]++; $extensionTotals[1] += $_.Length } Else { $Counters.Extensions[$_.Extension] = @(1, [int64]$_.Length) }
 		}
 	}
 }
@@ -2676,12 +2679,12 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 	If(!(Check-CTRLCRequest -eq $True)) {
 		# Do some stats (many thanks to http://www.hanselman.com/blog/ParsingCSVsAndPoorMansWebLogAnalysisWithPowerShell.aspx)
 		Write-Progress -Activity "Calculating Stats on Selection" -Status "Running ..." -CurrentOperation "Please Wait ..."
-		$statsByExtension = Import-Csv $BkCatalogStats -Delimiter "`t" | Select-Object Extension, Size | group Extension | select Name, @{Name="Count";Expression={($_.Count)}}, @{Name="Size";Expression={($_.Group | Measure-Object -Sum Size).Sum }} | Sort Size -desc
+		$statsByExtension = $Counters.Extensions.GetEnumerator() | select @{Name="Name";Expression={$_.Key}}, @{Name="Count";Expression={$_.Value[0]}}, @{Name="Size";Expression={$_.Value[1]}} | Sort Size -desc
 		Write-Progress -Activity "." -Status "." -Completed
 		
 		# Output summarized data
 		Trace " "
-		Trace " Selection Details" $BkCatalogStats
+		Trace " Selection Details"
 		Trace " ------------------------------------------------------------------------------"
 		Trace " Extension                              Count          Total MB  Abs %   Inc % "
 		Trace " -------------------------------  ----------- ----------------- ------- -------"
