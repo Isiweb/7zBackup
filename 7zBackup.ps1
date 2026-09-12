@@ -275,6 +275,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     Processed items are now read from the finished archive
 #                                             Bug   : With nofollowjunctions, folders enumerated after a skipped junction
 #                                                     could be silently left out of the scan
+#                                             Bug   : Rotation could delete archives of other jobs sharing the prefix end
+#                                                     or renamed copies. Archive name regex is now anchored
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -2736,7 +2738,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 				If(!(Test-Variable "BkRotate")) { Set-Variable -name "BkRotate" -value ([int]9999) -scope Script }
 				If(($BkRotate -ge 1)) {
 					$totalArchiveBytes = [int64]0
-					$fileNameRgx = ("$([Regex]::Escape($BkArchivePrefix))-$BkType-[0-9]{8}-[0-9]{4,6}\.(7z|zip|tar)(\.\d{3})?")
+					$fileNameRgx = ("^$([Regex]::Escape($BkArchivePrefix))-$BkType-[0-9]{8}-[0-9]{4,6}\.(7z|zip|tar)(\.\d{3})?$")
 					Trace " Archives in $BkDestPath"
 					Trace " ------------------------------------------------------------------------------"
 					Get-ChildItem $BkDestPath | ?{ $_.Name -match $fileNameRgx -and !$_.PSIscontainer } | sort @{expression={$_.Name};Descending=$true} | foreach-object {
