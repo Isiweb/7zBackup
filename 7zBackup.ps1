@@ -325,6 +325,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     logged as NOT ARCHIVED warnings, for every backup type
 #                                             Bug   : Clearing the Archive bit failed on files with other attributes (e.g. OneDrive,
 #                                                     issue #13) and silently did nothing on names with square brackets
+#                                             Feat  : New --mailkitpath: MailKit and its dependencies are loaded from that folder at
+#                                                     startup (issue #14). If loading fails, a warning is logged and SmtpClient is kept
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1282,6 +1284,49 @@ Function Remove-SymLink  {
 }
 
 # -----------------------------------------------------------------------------
+# Function 		: Import-MailKit
+# -----------------------------------------------------------------------------
+# Description	: Loads MimeKit and MailKit from the given folder. Their
+#				  dependencies are resolved from the same folder, whatever
+#				  version they were built against
+# Parameters    : [string]$folder - Folder holding MailKit.dll and its dependencies
+# Returns       : $null when loaded, otherwise the reason
+# -----------------------------------------------------------------------------
+Function Import-MailKit {
+	param([string]$folder)
+
+	foreach ($name in "MimeKit", "MailKit") {
+		If(!(Test-Path -LiteralPath (Join-Path $folder "$name.dll") -PathType Leaf)) { Return ("{0}.dll not found in {1}" -f $name, $folder) }
+	}
+	Try {
+		# C#: a PowerShell script block as AssemblyResolve handler overflows the stack
+		If(!("MailKitFolderResolver" -as [type])) {
+			Add-Type -TypeDefinition @"
+using System;
+using System.IO;
+using System.Reflection;
+public static class MailKitFolderResolver {
+	static string folder;
+	public static void Register(string path) {
+		if (folder == null) { AppDomain.CurrentDomain.AssemblyResolve += Resolve; }
+		folder = path;
+	}
+	static Assembly Resolve(object sender, ResolveEventArgs e) {
+		string file = Path.Combine(folder, new AssemblyName(e.Name).Name + ".dll");
+		return File.Exists(file) ? Assembly.LoadFrom(file) : null;
+	}
+}
+"@
+		}
+		[MailKitFolderResolver]::Register($folder)
+		foreach ($name in "MimeKit", "MailKit") { [void][System.Reflection.Assembly]::LoadFrom((Join-Path $folder "$name.dll")) }
+		Return $null
+	} Catch {
+		Return $_.Exception.GetBaseException().Message
+	}
+}
+
+# -----------------------------------------------------------------------------
 # Function 		: Send-Notification
 # -----------------------------------------------------------------------------
 # Description	: Sends the notification email to given adressee
@@ -1581,6 +1626,7 @@ Function Validate-Arguments {
 				"--smtpuser"        { Set-Variable -name BkSmtpUser -value $BkArguments[++$i] -scope Script }
 				"--smtppass"        { Set-Variable -name BkSmtpPass -value $BkArguments[++$i] -scope Script }
 				"--smtpssl"         { Set-Variable -name BkSmtpSSL -value $True -scope Script }
+				"--mailkitpath"     { Set-Variable -name BkMailKitPath -value $BkArguments[++$i] -scope Script }
 				"--7zbin"           { Set-Variable -name Bk7ZipBin -value $BkArguments[++$i] -scope Script }
 				"--7zipbin"         { Set-Variable -name Bk7ZipBin -value $BkArguments[++$i] -scope Script }
 				"--jbin"            { Set-Variable -name BkJunctionBin -value $BkArguments[++$i] -scope Script }
@@ -2041,6 +2087,17 @@ Function Validate-Variables {
 				Remove-Variable -name BkSmtpPort -scope Script
 			}
 			Remove-Variable -name i -scope Local
+		}
+
+		# ----------------------------------------------------------------------------------------------------------------------
+		# MailKit (optional) - Checks
+		# ----------------------------------------------------------------------------------------------------------------------
+		If(Test-Variable "BkMailKitPath") {
+			$mailKitError = Import-MailKit $BkMailKitPath
+			If($mailKitError) {
+				Trace (" Warning : MailKit not loaded ({0}), using SmtpClient" -f $mailKitError); $Counters.Warnings++
+				Remove-Variable -Name BkMailKitPath -Scope Script
+			}
 		}
 	
 	}
