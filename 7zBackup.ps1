@@ -353,6 +353,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                             Bug   : The log numbered selection exceptions one above their id in Selection-Excpt.csv
 #                                             Bug   : A cleanup folder that could not be removed wrote System.Object[] in Selection-Excpt.csv
 #                                                     Now it writes the first error and the real path of the folder
+#                                             Bug   : A cleanup file that could not be removed was written in Selection-Excpt.csv with its path
+#                                                     through the root dir link, removed after the job: now its real path, as in the log
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1155,7 +1157,7 @@ Function ProcessFolder ($thisFolder) {
 						Trace (" Removing F {0} " -f $childFileRealName)
 						Remove-Item -LiteralPath $childFile.FullName -Force -ErrorVariable childFileRemoveError | Out-Null
 						if (!$?) {
-							$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childFileRemoveError.CategoryInfo.Reason, $childFileRemoveError.CategoryInfo.TargetName))
+							$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childFileRemoveError.CategoryInfo.Reason, $childFileRealName))
 							Trace (" Exception id {0} on {1} " -f ($Counters.Exceptions - 1), $childFileRealName)
 							continue
 						}

@@ -222,6 +222,9 @@ Assert (($logIds -join ",") -eq ($fileIds -join ",")) "log ids match the excepti
 # The removal of CleanDir fails twice: denied.txt access denied (ArgumentException), then CleanDir not empty (IOException)
 $cleanDirLine = @(Get-Content -LiteralPath "$work\Exceptions.txt")[2]
 Assert ($cleanDirLine -eq "2`tArgumentException`t$source\CleanDir") "failed folder removal is one line with the first error and the real path [$cleanDirLine]"
+# The error names the file through the root dir link, which is removed after the job: the line has the real path
+$lockedFileLine = @(Get-Content -LiteralPath "$work\Exceptions.txt")[0]
+Assert ($lockedFileLine -eq "0`tIOException`t$source\locked.tmp") "failed file removal has the real path [$lockedFileLine]"
 
 $matchcleanupfiles = $null; $matchcleanupdirs = $null
 icacls "$source\ADenied" /remove:d "$env:USERNAME" | Out-Null
