@@ -351,6 +351,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                             Bug   : While 7-Zip wrote the archive, progress read its size from the folder listing, which lags
 #                                                     for open files: it kept showing "Waiting for archive ..."
 #                                             Bug   : The log numbered selection exceptions one above their id in Selection-Excpt.csv
+#                                             Bug   : A cleanup folder that could not be removed wrote System.Object[] in Selection-Excpt.csv
+#                                                     Now it writes the first error and the real path of the folder
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1071,7 +1073,8 @@ Function ProcessFolder ($thisFolder) {
 				Trace (" Removing D {0} " -f $thisFolder.RealName)
 				$folderToBeNuked | Remove-Item -Force -Recurse -ErrorVariable childDirRemoveError | Out-Null
 				If(-Not $?) {
-					$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childDirRemoveError.CategoryInfo.Reason, $childDirRemoveError.CategoryInfo.TargetName))	
+					# A recursive removal can fail several times (a file in use, then its folders not empty): the first error is the cause
+					$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childDirRemoveError[0].CategoryInfo.Reason, $thisFolder.RealName))	
 				    Trace (" Exception id {0} on {1} " -f ($Counters.Exceptions - 1), $thisFolder.RealName)
 				}
 			} Else {

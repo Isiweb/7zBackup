@@ -204,22 +204,29 @@ $work   = New-WorkDir
 $source = Join-Path $work "source"
 New-Item -ItemType Directory "$source\ADenied", "$source\CleanDir" -Force | Out-Null
 Set-Content -LiteralPath "$source\locked.tmp" -Value "locked"
-Set-Content -LiteralPath "$source\CleanDir\locked.txt" -Value "locked"
+Set-Content -LiteralPath "$source\CleanDir\denied.txt" -Value "denied"
 icacls "$source\ADenied" /deny "${env:USERNAME}:(RD)" | Out-Null
-# Files open without sharing cannot be deleted: matchcleanupfiles and matchcleanupdirs fail on them
+# A file open without sharing cannot be deleted: matchcleanupfiles fails on it
 $lockedFile = [System.IO.File]::Open("$source\locked.tmp", "Open", "Read", "None")
-$lockedInDir = [System.IO.File]::Open("$source\CleanDir\locked.txt", "Open", "Read", "None")
+# Deleting a file is allowed by DELETE on the file or DELETE_CHILD on its folder: deny both, matchcleanupdirs fails
+icacls "$source\CleanDir" /deny "${env:USERNAME}:(DC)" | Out-Null
+icacls "$source\CleanDir\denied.txt" /deny "${env:USERNAME}:(D)" | Out-Null
 
 $BkType = "full"; $BkNoFollowJunctions = $False; $BkDryRun = $False; $matchcleanupfiles = '\.tmp$'; $matchcleanupdirs = '\\CleanDir$'; $matchexcludepath = $null
 $included   = @(Invoke-Scan $work $source)
-$lockedFile.Close(); $lockedInDir.Close()
+$lockedFile.Close()
 $fileIds = @(Get-Content -LiteralPath "$work\Exceptions.txt" | ForEach-Object { $_.Split("`t")[0] })
 $logIds  = @($MyContext.Logger.ToString().Split("`n") | Where-Object { $_ -match '^ Exception id (\d+) on ' } | ForEach-Object { $_ -replace '^ Exception id (\d+) on .*$', '$1' })
 Assert (($fileIds -join ",") -eq "0,1,2") "precondition, removal of a file, listing of a folder and removal of a folder fail [$($fileIds -join ',')]"
 Assert (($logIds -join ",") -eq ($fileIds -join ",")) "log ids match the exceptions file ids [log $($logIds -join ',') / file $($fileIds -join ',')]"
+# The removal of CleanDir fails twice: denied.txt access denied (ArgumentException), then CleanDir not empty (IOException)
+$cleanDirLine = @(Get-Content -LiteralPath "$work\Exceptions.txt")[2]
+Assert ($cleanDirLine -eq "2`tArgumentException`t$source\CleanDir") "failed folder removal is one line with the first error and the real path [$cleanDirLine]"
 
 $matchcleanupfiles = $null; $matchcleanupdirs = $null
 icacls "$source\ADenied" /remove:d "$env:USERNAME" | Out-Null
+icacls "$source\CleanDir\denied.txt" /remove:d "$env:USERNAME" | Out-Null
+icacls "$source\CleanDir" /remove:d "$env:USERNAME" | Out-Null
 Remove-Item -LiteralPath $work -Recurse -Force
 
 Write-Host ""
