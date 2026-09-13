@@ -355,6 +355,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     Now it writes the first error and the real path of the folder
 #                                             Bug   : A cleanup file that could not be removed was written in Selection-Excpt.csv with its path
 #                                                     through the root dir link, removed after the job: now its real path, as in the log
+#                                             Bug   : Cleanup files and folders that could not be removed for access denied were logged as ArgumentException
+#                                                     (PowerShell 5.1 Remove-Item): .NET deletes now name the real error. Read-only flags are cleared first
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1073,11 +1075,27 @@ Function ProcessFolder ($thisFolder) {
 		If($folderToBeNuked) {
 			If(!$BkDryRun) {
 				Trace (" Removing D {0} " -f $thisFolder.RealName)
-				$folderToBeNuked | Remove-Item -Force -Recurse -ErrorVariable childDirRemoveError | Out-Null
-				If(-Not $?) {
-					# A recursive removal can fail several times (a file in use, then its folders not empty): the first error is the cause
-					$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childDirRemoveError[0].CategoryInfo.Reason, $thisFolder.RealName))	
-				    Trace (" Exception id {0} on {1} " -f ($Counters.Exceptions - 1), $thisFolder.RealName)
+				# .NET deletes name the real error: Remove-Item in PowerShell 5.1 reports access denied as ArgumentException.
+				# Directory.Delete refuses read-only items: clear the flag first, never through links (their targets are elsewhere)
+				# It also fails on junctions inside: folder links are removed first, a non-recursive delete removes only the link
+				$childDirRemoveError = $null
+				Try {
+					$foldersToClear = New-Object System.Collections.Stack
+					$foldersToClear.Push($folderToBeNuked)
+					While($foldersToClear.Count) {
+						$folderToClear = $foldersToClear.Pop()
+						If($folderToClear.Attributes -band [System.IO.FileAttributes]::ReadOnly) { $folderToClear.Attributes = $folderToClear.Attributes -bXOR [System.IO.FileAttributes]::ReadOnly }
+						foreach ($item in $folderToClear.GetFileSystemInfos()) {
+							If($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { If($item -is [System.IO.DirectoryInfo]) { $item.Delete() }; continue }
+							If($item -is [System.IO.DirectoryInfo]) { $foldersToClear.Push($item) }
+							ElseIf($item.Attributes -band [System.IO.FileAttributes]::ReadOnly) { $item.Attributes = $item.Attributes -bXOR [System.IO.FileAttributes]::ReadOnly }
+						}
+					}
+					[System.IO.Directory]::Delete($folderToBeNuked.FullName, $True)
+				} Catch { $childDirRemoveError = $_.Exception.GetBaseException() }
+				If($childDirRemoveError) {
+					$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childDirRemoveError.GetType().Name, $thisFolder.RealName))
+					Trace (" Exception id {0} on {1} " -f ($Counters.Exceptions - 1), $thisFolder.RealName)
 				}
 			} Else {
 				Trace (" Would remove {0} " -f $thisFolder.RealName)
@@ -1155,9 +1173,14 @@ Function ProcessFolder ($thisFolder) {
 				If(($matchcleanupfiles) -and ($childFile.Name -match $matchcleanupfiles)) {
 					If(!$BkDryRun) {
 						Trace (" Removing F {0} " -f $childFileRealName)
-						Remove-Item -LiteralPath $childFile.FullName -Force -ErrorVariable childFileRemoveError | Out-Null
-						if (!$?) {
-							$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childFileRemoveError.CategoryInfo.Reason, $childFileRealName))
+						# File.Delete names the real error (Remove-Item in PowerShell 5.1 reports access denied as ArgumentException). It refuses read-only files
+						$childFileRemoveError = $null
+						Try {
+							If($childFile.Attributes -band [System.IO.FileAttributes]::ReadOnly) { $childFile.Attributes = $childFile.Attributes -bXOR [System.IO.FileAttributes]::ReadOnly }
+							[System.IO.File]::Delete($childFile.FullName)
+						} Catch { $childFileRemoveError = $_.Exception.GetBaseException() }
+						If($childFileRemoveError) {
+							$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childFileRemoveError.GetType().Name, $childFileRealName))
 							Trace (" Exception id {0} on {1} " -f ($Counters.Exceptions - 1), $childFileRealName)
 							continue
 						}

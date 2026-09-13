@@ -202,34 +202,73 @@ Remove-Item -LiteralPath $work -Recurse -Force
 Write-Host "`n Case: exception ids in the log match the ids in the exceptions file"
 $work   = New-WorkDir
 $source = Join-Path $work "source"
-New-Item -ItemType Directory "$source\ADenied", "$source\CleanDir" -Force | Out-Null
+New-Item -ItemType Directory "$source\ADenied", "$source\CleanDir", "$source\Files" -Force | Out-Null
 Set-Content -LiteralPath "$source\locked.tmp" -Value "locked"
 Set-Content -LiteralPath "$source\CleanDir\denied.txt" -Value "denied"
+Set-Content -LiteralPath "$source\Files\denied.tmp" -Value "denied"
 icacls "$source\ADenied" /deny "${env:USERNAME}:(RD)" | Out-Null
 # A file open without sharing cannot be deleted: matchcleanupfiles fails on it
 $lockedFile = [System.IO.File]::Open("$source\locked.tmp", "Open", "Read", "None")
-# Deleting a file is allowed by DELETE on the file or DELETE_CHILD on its folder: deny both, matchcleanupdirs fails
-icacls "$source\CleanDir" /deny "${env:USERNAME}:(DC)" | Out-Null
-icacls "$source\CleanDir\denied.txt" /deny "${env:USERNAME}:(D)" | Out-Null
+# Deleting a file is allowed by DELETE on the file or DELETE_CHILD on its folder: deny both, matchcleanupdirs and matchcleanupfiles fail
+foreach ($deniedFile in "$source\CleanDir\denied.txt", "$source\Files\denied.tmp") {
+	icacls (Split-Path $deniedFile) /deny "${env:USERNAME}:(DC)" | Out-Null
+	icacls $deniedFile /deny "${env:USERNAME}:(D)" | Out-Null
+}
 
 $BkType = "full"; $BkNoFollowJunctions = $False; $BkDryRun = $False; $matchcleanupfiles = '\.tmp$'; $matchcleanupdirs = '\\CleanDir$'; $matchexcludepath = $null
 $included   = @(Invoke-Scan $work $source)
 $lockedFile.Close()
 $fileIds = @(Get-Content -LiteralPath "$work\Exceptions.txt" | ForEach-Object { $_.Split("`t")[0] })
 $logIds  = @($MyContext.Logger.ToString().Split("`n") | Where-Object { $_ -match '^ Exception id (\d+) on ' } | ForEach-Object { $_ -replace '^ Exception id (\d+) on .*$', '$1' })
-Assert (($fileIds -join ",") -eq "0,1,2") "precondition, removal of a file, listing of a folder and removal of a folder fail [$($fileIds -join ',')]"
+Assert (($fileIds -join ",") -eq "0,1,2,3") "precondition, removal of a file, listing of a folder, removal of a folder and of a denied file fail [$($fileIds -join ',')]"
 Assert (($logIds -join ",") -eq ($fileIds -join ",")) "log ids match the exceptions file ids [log $($logIds -join ',') / file $($fileIds -join ',')]"
-# The removal of CleanDir fails twice: denied.txt access denied (ArgumentException), then CleanDir not empty (IOException)
+# denied.txt cannot be deleted: the line names the real error, not the ArgumentException of Remove-Item in PowerShell 5.1
 $cleanDirLine = @(Get-Content -LiteralPath "$work\Exceptions.txt")[2]
-Assert ($cleanDirLine -eq "2`tArgumentException`t$source\CleanDir") "failed folder removal is one line with the first error and the real path [$cleanDirLine]"
+Assert ($cleanDirLine -eq "2`tUnauthorizedAccessException`t$source\CleanDir") "failed folder removal is one line with the real error and the real path [$cleanDirLine]"
 # The error names the file through the root dir link, which is removed after the job: the line has the real path
 $lockedFileLine = @(Get-Content -LiteralPath "$work\Exceptions.txt")[0]
 Assert ($lockedFileLine -eq "0`tIOException`t$source\locked.tmp") "failed file removal has the real path [$lockedFileLine]"
+$deniedFileLine = @(Get-Content -LiteralPath "$work\Exceptions.txt")[3]
+Assert ($deniedFileLine -eq "3`tUnauthorizedAccessException`t$source\Files\denied.tmp") "denied file removal names the real error [$deniedFileLine]"
 
 $matchcleanupfiles = $null; $matchcleanupdirs = $null
 icacls "$source\ADenied" /remove:d "$env:USERNAME" | Out-Null
-icacls "$source\CleanDir\denied.txt" /remove:d "$env:USERNAME" | Out-Null
-icacls "$source\CleanDir" /remove:d "$env:USERNAME" | Out-Null
+foreach ($deniedFile in "$source\CleanDir\denied.txt", "$source\Files\denied.tmp") {
+	icacls $deniedFile /remove:d "$env:USERNAME" | Out-Null
+	icacls (Split-Path $deniedFile) /remove:d "$env:USERNAME" | Out-Null
+}
+Remove-Item -LiteralPath $work -Recurse -Force
+
+# -----------------------------------------------------------------------------
+Write-Host "`n Case: cleanup removes read-only, hidden and system items and does not enter links"
+$work   = New-WorkDir
+$source = Join-Path $work "source"
+New-Item -ItemType Directory "$source\Junk\RoSub", "$work\outside" -Force | Out-Null
+Set-Content -LiteralPath "$source\keep.txt" -Value "keep"
+Set-Content -LiteralPath "$source\old.tmp" -Value "old"
+Set-Content -LiteralPath "$source\hidden.tmp" -Value "hidden"
+Set-Content -LiteralPath "$source\Junk\ro.txt" -Value "ro"
+Set-Content -LiteralPath "$source\Junk\hs.txt" -Value "hs"
+Set-Content -LiteralPath "$source\Junk\RoSub\inner.txt" -Value "inner"
+Set-Content -LiteralPath "$work\outside\target.txt" -Value "target"
+cmd /c "mklink /J `"$source\Junk\link`" `"$work\outside`"" | Out-Null
+foreach ($readOnlyFile in "$source\old.tmp", "$source\Junk\ro.txt", "$source\Junk\RoSub\inner.txt", "$work\outside\target.txt") { [System.IO.File]::SetAttributes($readOnlyFile, "ReadOnly") }
+foreach ($hiddenFile in "$source\hidden.tmp", "$source\Junk\hs.txt") { [System.IO.File]::SetAttributes($hiddenFile, "Hidden, System") }
+foreach ($readOnlyFolder in "$source\Junk", "$source\Junk\RoSub", "$work\outside") { [System.IO.File]::SetAttributes($readOnlyFolder, "Directory, ReadOnly") }
+
+$BkType = "full"; $BkNoFollowJunctions = $False; $BkDryRun = $False; $matchcleanupfiles = '\.tmp$'; $matchcleanupdirs = '\\Junk$'; $matchexcludepath = $null
+$included   = @(Invoke-Scan $work $source)
+$exceptions = @(Get-Content -LiteralPath "$work\Exceptions.txt")
+Assert ($exceptions.Count -eq 0) "no exception [$($exceptions -join ' | ')]"
+Assert (!(Test-Path -LiteralPath "$source\old.tmp") -and !(Test-Path -LiteralPath "$source\hidden.tmp")) "read-only and hidden system cleanup files are removed"
+Assert (!(Test-Path -LiteralPath "$source\Junk")) "read-only cleanup folder is removed with its read-only, hidden, system items and link"
+Assert ($included -contains "Alias\keep.txt") "other file is selected [$($included -join ', ')]"
+Assert (Test-Path -LiteralPath "$work\outside\target.txt") "the file behind the link survives"
+Assert ((([int][System.IO.File]::GetAttributes("$work\outside\target.txt") -band 1) -ne 0) -and (([int][System.IO.File]::GetAttributes("$work\outside") -band 1) -ne 0)) "the link target and its file keep their read-only flag"
+
+$matchcleanupfiles = $null; $matchcleanupdirs = $null
+If(Test-Path -LiteralPath "$source\Junk\link") { cmd /c "rd `"$source\Junk\link`"" }
+cmd /c "attrib -r -h -s `"$work\*`" /s /d" | Out-Null
 Remove-Item -LiteralPath $work -Recurse -Force
 
 Write-Host ""
