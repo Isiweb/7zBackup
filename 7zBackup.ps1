@@ -357,6 +357,7 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     through the root dir link, removed after the job: now its real path, as in the log
 #                                             Bug   : Cleanup files and folders that could not be removed for access denied were logged as ArgumentException
 #                                                     (PowerShell 5.1 Remove-Item): .NET deletes now name the real error. Read-only flags are cleared first
+#                                             Code  : Full cmdlet names (Where-Object, Select-Object, Sort-Object) instead of the aliases ?, select and sort
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1160,7 +1161,7 @@ Function ProcessFolder ($thisFolder) {
 	
 	# Process Files Within The Container
 	If($scanThisPathForFiles) {
-		$childFiles = @($childItems | ? { $_ -is [System.IO.FileInfo] })
+		$childFiles = @($childItems | Where-Object { $_ -is [System.IO.FileInfo] })
 		If($childFiles.Count) {
 			for ($i=0; $i -lt $childFiles.Count; $i++) {
 				
@@ -1248,7 +1249,7 @@ Function ProcessFolder ($thisFolder) {
 	
 	# Process Directories Within The Container
 	If($scanThisPathForRecursion -And (!(Check-CTRLCRequest -eq $True))) {
-		$childFolders = @($childItems | ? { $_ -is [System.IO.DirectoryInfo] })
+		$childFolders = @($childItems | Where-Object { $_ -is [System.IO.DirectoryInfo] })
 		If($childFolders.Count) {
 			# Queue children right after this folder, in order. Skipped junctions take no slot
 			$insertAt = $catalogFoldersIndex + 1
@@ -1318,7 +1319,7 @@ Function Remove-RootDir {
 	
 	If (Test-Path -Path $rootPath -PathType Container) {
 		Set-Variable -Name "junctionsRemoved" -Value $True -Scope Private | Out-Null
-		Get-ChildItem -Path $rootPath | ? { $_.Attributes -band 1024 } | ForEach-Object {
+		Get-ChildItem -Path $rootPath | Where-Object { $_.Attributes -band 1024 } | ForEach-Object {
 			If([int]$MyContext.WinVer[0] -lt 6) {
 				$junctionsRemoved = Remove-Junction $_.FullName
 				If(!$junctionsRemoved) {Return}
@@ -1327,7 +1328,7 @@ Function Remove-RootDir {
 				If(!$junctionsRemoved) {Return}
 			}
 		}
-		If($junctionsRemoved -And (@(Get-ChildItem -Path $rootPath | ? {$_.PsIsContainer}).Count -eq 0) ) {
+		If($junctionsRemoved -And (@(Get-ChildItem -Path $rootPath | Where-Object {$_.PsIsContainer}).Count -eq 0) ) {
 			Remove-Item -Path $rootPath -Recurse -Force | Out-Null
 			Write-Output $?
 			Return 
@@ -1443,7 +1444,7 @@ Function Send-MailKitNotification {
 	$body = New-Object MimeKit.BodyBuilder
 	$body.TextBody = $MyContext.Logger.ToString()
 	If ($BkNotifyExtra -ne "none") {
-		Get-ChildItem -Path $BkRootDir -Force | ? {!$_.PSIsContainer} | ForEach-Object {
+		Get-ChildItem -Path $BkRootDir -Force | Where-Object {!$_.PSIsContainer} | ForEach-Object {
 			If(($_.Length -gt 0) -And ($_.Name -notmatch "stats") -And ($_.Name -notmatch "README")) {
 				If($BkNotifyExtra -ieq "attach") { [void]$body.Attachments.Add($_.FullName) }
 				Else { $body.TextBody += ("`n`n{0}`n" -f $_.Name) + (Get-Content $_) }
@@ -1552,7 +1553,7 @@ Function Send-Notification {
 			# Do we have to include extra informations ?
 			If ($BkNotifyExtra -ne "none") {
 
-				Get-ChildItem -Path $BkRootDir -Force | ? {!$_.PSIsContainer} | ForEach-Object {
+				Get-ChildItem -Path $BkRootDir -Force | Where-Object {!$_.PSIsContainer} | ForEach-Object {
 					If(	
 						($_.Length -gt 0) -And
 						($_.Name -notmatch "stats") -And 
@@ -1885,7 +1886,7 @@ Function Validate-Variables {
 		# Try to load Selection Directives (if any)
 		# Load all rows except comments and empty lines.
 		Remove-Variable -name BkSelectionContents -scope Script 
-		Set-Variable -name BkSelectionContents -scope Script -Value @(Get-Content $BkSelection | ? {$_ -notmatch "^#|^\s*$"})
+		Set-Variable -name BkSelectionContents -scope Script -Value @(Get-Content $BkSelection | Where-Object {$_ -notmatch "^#|^\s*$"})
 		
 		# If we have no directive from selection then handle the error
 		If(
@@ -1915,21 +1916,21 @@ Function Validate-Variables {
 			$BkSelectionContents | Where-Object {$_ -match "^nofollowjunctions$"} | ForEach-Object { Set-Variable -name "BkNoFollowJunctions" -value $True -scope Script }
 			
 			# Look whether selection contents sets max/min file sizes
-			$BkSelectionContents | ? {$_ -match "^maxfilesize=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMaxFileSize" -Value $_.Value -Scope Script}
-			$BkSelectionContents | ? {$_ -match "^minfilesize=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMinFileSize" -Value $_.Value -Scope Script}
+			$BkSelectionContents | Where-Object {$_ -match "^maxfilesize=\d+"} | Select-Object @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMaxFileSize" -Value $_.Value -Scope Script}
+			$BkSelectionContents | Where-Object {$_ -match "^minfilesize=\d+"} | Select-Object @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMinFileSize" -Value $_.Value -Scope Script}
 
 			# Look whether selection contents sets max/min file ages
-			$BkSelectionContents | ? {$_ -match "^maxfileage=\d+((\,|\.)\d+)?"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMaxFileAge" -Value $_.Value -Scope Script}
-			$BkSelectionContents | ? {$_ -match "^minfileage=\d+((\,|\.)\d+)?"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMinFileAge" -Value $_.Value -Scope Script}
+			$BkSelectionContents | Where-Object {$_ -match "^maxfileage=\d+((\,|\.)\d+)?"} | Select-Object @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMaxFileAge" -Value $_.Value -Scope Script}
+			$BkSelectionContents | Where-Object {$_ -match "^minfileage=\d+((\,|\.)\d+)?"} | Select-Object @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkMinFileAge" -Value $_.Value -Scope Script}
 			
 			# Look for compression
-			$BkSelectionContents | ? {$_ -match "^compression=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveCompression" -Value $_.Value -Scope Script}
+			$BkSelectionContents | Where-Object {$_ -match "^compression=\d+"} | Select-Object @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveCompression" -Value $_.Value -Scope Script}
 
 			# Look for threads
-			$BkSelectionContents | ? {$_ -match "^threads=\d+"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveThreads" -Value $_.Value -Scope Script}
+			$BkSelectionContents | Where-Object {$_ -match "^threads=\d+"} | Select-Object @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1).Replace(",",".")}} | ForEach-Object {Set-Variable -Name "BkArchiveThreads" -Value $_.Value -Scope Script}
 			
 			# Look for Solid mode: solid=0 turns it off, solid=1 on
-			$BkSelectionContents | ? {$_ -match "^solid=[01]$"} | select @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1) -eq "1"}} | ForEach-Object {Set-Variable -Name "BkArchiveSolid" -Value $_.Value -Scope Script}
+			$BkSelectionContents | Where-Object {$_ -match "^solid=[01]$"} | Select-Object @{Name="Value";Expression={$_.Substring($_.IndexOf("=") + 1) -eq "1"}} | ForEach-Object {Set-Variable -Name "BkArchiveSolid" -Value $_.Value -Scope Script}
 
 		}
 	}
@@ -2652,7 +2653,7 @@ If($MyContext.Cancelling) {
 
 # Add Support Files to archive selection 
 If($Counters.FilesSelected -gt 0) {
-	Get-ChildItem -Path $BkRootDir -Force | ? {!$_.PSIsContainer} | ForEach-Object {
+	Get-ChildItem -Path $BkRootDir -Force | Where-Object {!$_.PSIsContainer} | ForEach-Object {
 		if(	
 			($_.Name -notmatch "stats") -And
 			($_.Name -notmatch "README") -And
@@ -2728,7 +2729,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 	If(!(Check-CTRLCRequest -eq $True)) {
 		# Do some stats (many thanks to http://www.hanselman.com/blog/ParsingCSVsAndPoorMansWebLogAnalysisWithPowerShell.aspx)
 		Write-Progress -Activity "Calculating Stats on Selection" -Status "Running ..." -CurrentOperation "Please Wait ..."
-		$statsByExtension = $Counters.Extensions.GetEnumerator() | select @{Name="Name";Expression={$_.Key}}, @{Name="Count";Expression={$_.Value[0]}}, @{Name="Size";Expression={$_.Value[1]}} | Sort Size -desc
+		$statsByExtension = $Counters.Extensions.GetEnumerator() | Select-Object @{Name="Name";Expression={$_.Key}}, @{Name="Count";Expression={$_.Value[0]}}, @{Name="Size";Expression={$_.Value[1]}} | Sort-Object Size -desc
 		Write-Progress -Activity "." -Status "." -Completed
 		
 		# Output summarized data
@@ -2891,7 +2892,7 @@ public class SevenZipOutput {
 			$ArchiveSize = 0
 			# The listing has the size an open file had when the folder entry was last updated, often 0 while
 			# 7-Zip writes: Refresh reads the current size of each archive file (and volume)
-			Get-ChildItem -Path $BkDestPath -Filter ("{0}*" -f $BkArchiveName) | ?{ !$_.PSIscontainer } | ForEach-Object { $_.Refresh(); $ArchiveSize += $_.Length }
+			Get-ChildItem -Path $BkDestPath -Filter ("{0}*" -f $BkArchiveName) | Where-Object { !$_.PSIscontainer } | ForEach-Object { $_.Refresh(); $ArchiveSize += $_.Length }
 			If ( $ArchiveSize -gt 0 ) { $Status = "Archive Size {0,0:n2} MByte. so far ..." -f ($ArchiveSize / 1Mb) }
 			
 			# Log the 7-Zip error lines received so far, in order
@@ -2959,7 +2960,7 @@ public class SevenZipOutput {
 		
 		# Check overall size of archive (including volumes if present)
 		$ArchiveSize = 0
-		Get-ChildItem -Path $BkDestPath -Filter ("{0}*" -f $BkArchiveName) | ?{ !$_.PSIscontainer } | ForEach-Object { $ArchiveSize += $_.Length }
+		Get-ChildItem -Path $BkDestPath -Filter ("{0}*" -f $BkArchiveName) | Where-Object { !$_.PSIscontainer } | ForEach-Object { $ArchiveSize += $_.Length }
 
 		# Check exit code by 7zip - If ErrorLevel is <2 then we assume backup
 		# process completed successfully
@@ -2989,7 +2990,7 @@ public class SevenZipOutput {
 					$fileNameRgx = ("^$([Regex]::Escape($BkArchivePrefix))-$BkType-[0-9]{8}-[0-9]{4,6}\.(7z|zip|tar)(\.\d{3})?$")
 					Trace " Archives in $BkDestPath"
 					Trace " ------------------------------------------------------------------------------"
-					Get-ChildItem $BkDestPath | ?{ $_.Name -match $fileNameRgx -and !$_.PSIscontainer } | sort @{expression={$_.Name};Descending=$true} | foreach-object {
+					Get-ChildItem $BkDestPath | Where-Object { $_.Name -match $fileNameRgx -and !$_.PSIscontainer } | Sort-Object @{expression={$_.Name};Descending=$true} | foreach-object {
 						If(!($BkRotate -le 0)) { 
 							If ($_.Name -match ([Regex]::Escape($BkArchiveName))) {
 								Trace (" New      : {0,-48} {1,15:n2} MB " -f $_.Name, $($_.Length / 1MB) ); $totalArchiveBytes += [int64]$_.Length
