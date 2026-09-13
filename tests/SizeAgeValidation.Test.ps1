@@ -1,4 +1,4 @@
-# Integration test for the size and age checks in Validate-Variables.
+# Integration test for the size and age checks in Assert-Variables.
 # An invalid value must be reported with the name of the setting that has it;
 # valid values must still be accepted.
 #
@@ -24,7 +24,7 @@ New-Item -ItemType Directory "$work\dest", "$work\source" -Force | Out-Null
 $selection = Join-Path $work "selection.txt"
 Set-Content -LiteralPath $selection -Value "includesource=$work\source|alias=Source"
 
-# Runs Validate-Variables with an otherwise valid setup and one size / age value, as set by the command line
+# Runs Assert-Variables with an otherwise valid setup and one size / age value, as set by the command line
 Function Get-Errors ([string]$variable, [string]$value) {
 	foreach ($name in "BkMaxFileSize", "BkMinFileSize", "BkMaxFileAge", "BkMinFileAge") { Remove-Variable -Name $name -Scope Script }
 	$script:MyContext       = [hashtable]::Synchronized(@{ PSVer = [int]$PSVersionTable.PSVersion.Major; WinVer = @("10"); Logger = (New-Object System.Text.StringBuilder) })
@@ -33,7 +33,7 @@ Function Get-Errors ([string]$variable, [string]$value) {
 	$script:BkDestPath      = "$work\dest"
 	$script:BkArchivePrefix = "test"
 	Set-Variable -Name $variable -Value $value -Scope Script
-	Write-Output @(Validate-Variables)
+	Write-Output @(Assert-Variables)
 }
 
 Write-Host "`n Case: invalid values are reported with the right name"

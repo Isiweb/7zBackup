@@ -1,4 +1,4 @@
-# Integration test for the SMTP authentication checks in Validate-Variables.
+# Integration test for the SMTP authentication checks in Assert-Variables.
 # An incomplete or blank user / password pair must be reported and dropped, so
 # the notification never authenticates with a blank credential.
 #
@@ -24,7 +24,7 @@ New-Item -ItemType Directory "$work\dest", "$work\source" -Force | Out-Null
 $selection = Join-Path $work "selection.txt"
 Set-Content -LiteralPath $selection -Value "includesource=$work\source|alias=Source"
 
-# Runs Validate-Variables with an otherwise valid notification setup and the given user / password; returns the errors
+# Runs Assert-Variables with an otherwise valid notification setup and the given user / password; returns the errors
 Function Invoke-Validation ([hashtable]$credentials) {
 	foreach ($name in "BkNotifyLog", "BkNotifyLogCc", "BkNotifyLogBcc", "BkSmtpUser", "BkSmtpPass") { Remove-Variable -Name $name -Scope Script }
 	$script:MyContext       = [hashtable]::Synchronized(@{ PSVer = [int]$PSVersionTable.PSVersion.Major; WinVer = @("10"); Logger = (New-Object System.Text.StringBuilder) })
@@ -37,7 +37,7 @@ Function Invoke-Validation ([hashtable]$credentials) {
 	$script:BkSmtpFrom      = "backup@example.com"
 	$script:BkSmtpRelay     = "smtp.example.com"
 	foreach ($name in $credentials.Keys) { Set-Variable -Name $name -Value $credentials[$name] -Scope Script }
-	Write-Output @(Validate-Variables)
+	Write-Output @(Assert-Variables)
 }
 
 Function Count-CredentialErrors ($errors) { @($errors | Where-Object { $_ -match "--smtpuser or --smtppass" }).Count }

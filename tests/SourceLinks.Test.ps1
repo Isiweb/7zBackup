@@ -1,4 +1,4 @@
-# Test for the links from the root dir to the sources (Make-SymLink).
+# Test for the links from the root dir to the sources (New-SymLink).
 # Local sources must get a junction, which needs no admin rights. Network sources
 # (UNC paths, network drives) need a symbolic link: junctions can not point there.
 #
@@ -31,7 +31,7 @@ New-Item -ItemType Directory "$work\root", "$work\source" -Force | Out-Null
 Set-Content -LiteralPath "$work\source\file.txt" -Value "x"
 $link = "$work\root\Alias"
 
-$linked = Make-SymLink $link "$work\source"
+$linked = New-SymLink $link "$work\source"
 Assert ($linked -eq $True)                                                  "the link is created [$linked]"
 Assert ((Get-Item -LiteralPath $link -Force).LinkType -eq "Junction")       "the link is a junction [$((Get-Item -LiteralPath $link -Force).LinkType)]"
 Assert (Test-Path -LiteralPath "$link\file.txt")                            "files are reachable through the link"

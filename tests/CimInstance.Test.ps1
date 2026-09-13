@@ -28,7 +28,7 @@ New-Item -ItemType Directory "$work\dest", "$work\source" -Force | Out-Null
 $selection = Join-Path $work "selection.txt"
 Set-Content -LiteralPath $selection -Value "includesource=$work\source|alias=Source"
 
-# Runs Validate-Variables with an otherwise valid setup and the given --threads; returns the errors
+# Runs Assert-Variables with an otherwise valid setup and the given --threads; returns the errors
 Function Invoke-Validation ($threads) {
 	$script:MyContext        = [hashtable]::Synchronized(@{ PSVer = [int]$PSVersionTable.PSVersion.Major; WinVer = @("10"); Logger = (New-Object System.Text.StringBuilder) })
 	$script:Counters         = @{ Warnings = 0 }
@@ -37,7 +37,7 @@ Function Invoke-Validation ($threads) {
 	$script:BkDestPath       = "$work\dest"
 	$script:BkArchivePrefix  = "test"
 	$script:BkArchiveThreads = $threads
-	Write-Output @(Validate-Variables)
+	Write-Output @(Assert-Variables)
 }
 
 Write-Host "`n Case: --threads larger than the logical processors"

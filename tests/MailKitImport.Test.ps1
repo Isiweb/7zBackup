@@ -1,4 +1,4 @@
-# Integration test for loading MailKit in Validate-Variables (--mailkitpath).
+# Integration test for loading MailKit in Assert-Variables (--mailkitpath).
 # A folder that can not be loaded must give a warning, drop the setting and keep
 # the job running (SmtpClient is used). A valid folder must load MailKit,
 # including dependencies built against older versions of System.Memory.
@@ -29,7 +29,7 @@ New-Item -ItemType Directory "$work\dest", "$work\source", "$work\broken" -Force
 $selection = Join-Path $work "selection.txt"
 Set-Content -LiteralPath $selection -Value "includesource=$work\source|alias=Source"
 
-# Runs Validate-Variables with an otherwise valid notification setup and the given MailKit folder; returns the errors
+# Runs Assert-Variables with an otherwise valid notification setup and the given MailKit folder; returns the errors
 Function Invoke-Validation ([string]$mailKitPath) {
 	foreach ($name in "BkNotifyLog", "BkNotifyLogCc", "BkNotifyLogBcc", "BkMailKitPath") { Remove-Variable -Name $name -Scope Script }
 	$script:MyContext       = [hashtable]::Synchronized(@{ PSVer = [int]$PSVersionTable.PSVersion.Major; WinVer = @("10"); Logger = (New-Object System.Text.StringBuilder) })
@@ -42,7 +42,7 @@ Function Invoke-Validation ([string]$mailKitPath) {
 	$script:BkSmtpFrom      = "backup@example.com"
 	$script:BkSmtpRelay     = "smtp.example.com"
 	$script:BkMailKitPath   = $mailKitPath
-	Write-Output @(Validate-Variables)
+	Write-Output @(Assert-Variables)
 }
 
 Function Assert-Fallback ([string]$label, $errors, [string]$reasonPattern) {

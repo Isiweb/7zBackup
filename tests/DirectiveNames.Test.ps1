@@ -23,7 +23,7 @@ $work = Join-Path $env:TEMP ("7zb-test-" + [guid]::NewGuid().ToString("N").Subst
 New-Item -ItemType Directory "$work\dest", "$work\source" -Force | Out-Null
 $selection = Join-Path $work "selection.txt"
 
-# Runs Validate-Variables on a selection file with the given lines; returns the errors
+# Runs Assert-Variables on a selection file with the given lines; returns the errors
 Function Invoke-Validation ([string[]]$lines) {
 	Set-Content -LiteralPath $selection -Value $lines
 	$script:MyContext       = [hashtable]::Synchronized(@{ PSVer = [int]$PSVersionTable.PSVersion.Major; WinVer = @("10"); Logger = (New-Object System.Text.StringBuilder) })
@@ -31,7 +31,7 @@ Function Invoke-Validation ([string[]]$lines) {
 	$script:BkSelection     = $selection
 	$script:BkDestPath      = "$work\dest"
 	$script:BkArchivePrefix = "test"
-	Write-Output @(Validate-Variables)
+	Write-Output @(Assert-Variables)
 }
 
 # -----------------------------------------------------------------------------

@@ -35,7 +35,7 @@ Function Reset-Context {
 Write-Host "`n Case: failing post action"
 Reset-Context
 $BkPostAction = { throw "post action failed" }
-Do-PostAction
+Invoke-PostAction
 $log = $MyContext.Logger.ToString()
 Assert ($log.Contains("post action failed"))    "the error message is logged"
 Assert (!$log.Contains(".Exception.Message"))  "no unexpanded property text [$(($log -split "`r?`n" | Where-Object { $_ -match 'failed' }) -join ' | ')]"

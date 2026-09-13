@@ -1,5 +1,5 @@
 # Integration test for notification addresses (IsValidEmailAddress and the
-# address checks in Validate-Variables).
+# address checks in Assert-Variables).
 # Valid addresses must be accepted; an invalid address must be dropped with a
 # warning, without stopping the job.
 #
@@ -35,7 +35,7 @@ New-Item -ItemType Directory "$work\dest", "$work\source" -Force | Out-Null
 $selection = Join-Path $work "selection.txt"
 Set-Content -LiteralPath $selection -Value "includesource=$work\source|alias=Source"
 
-# Runs Validate-Variables with an otherwise valid setup and the given To address(es); returns the errors
+# Runs Assert-Variables with an otherwise valid setup and the given To address(es); returns the errors
 Function Invoke-Validation ($notifyTo, $from = "backup@example.com", $relay = "smtp.example.com") {
 	foreach ($name in "BkNotifyLog", "BkNotifyLogCc", "BkNotifyLogBcc") { Remove-Variable -Name $name -Scope Script }
 	$script:MyContext       = [hashtable]::Synchronized(@{ PSVer = [int]$PSVersionTable.PSVersion.Major; WinVer = @("10"); Logger = (New-Object System.Text.StringBuilder) })
@@ -47,7 +47,7 @@ Function Invoke-Validation ($notifyTo, $from = "backup@example.com", $relay = "s
 	$script:BkNotifyLog     = $notifyTo
 	$script:BkSmtpFrom      = $from
 	$script:BkSmtpRelay     = $relay
-	Write-Output @(Validate-Variables)
+	Write-Output @(Assert-Variables)
 }
 
 Write-Host "`n Case: one valid and one invalid To address"

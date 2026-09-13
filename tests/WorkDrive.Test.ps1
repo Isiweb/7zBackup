@@ -1,4 +1,4 @@
-# Integration test for the work drive check in Validate-Variables.
+# Integration test for the work drive check in Assert-Variables.
 # A drive letter without a drive must be rejected; a writable NTFS drive must
 # be accepted.
 # Note: the accepted case creates and removes a test folder in the root of the
@@ -26,7 +26,7 @@ New-Item -ItemType Directory "$work\dest", "$work\source" -Force | Out-Null
 $selection = Join-Path $work "selection.txt"
 Set-Content -LiteralPath $selection -Value "includesource=$work\source|alias=Source"
 
-# Runs Validate-Variables with an otherwise valid setup; returns the work drive errors only
+# Runs Assert-Variables with an otherwise valid setup; returns the work drive errors only
 Function Get-WorkDriveErrors ([string]$drive) {
 	$script:MyContext       = [hashtable]::Synchronized(@{ PSVer = [int]$PSVersionTable.PSVersion.Major; WinVer = @("10"); Logger = (New-Object System.Text.StringBuilder) })
 	$script:BkType          = "full"
@@ -34,7 +34,7 @@ Function Get-WorkDriveErrors ([string]$drive) {
 	$script:BkDestPath      = "$work\dest"
 	$script:BkArchivePrefix = "test"
 	$script:BkWorkDrive     = $drive
-	Write-Output @(Validate-Variables | Where-Object { $_ -match "--workdrive" })
+	Write-Output @(Assert-Variables | Where-Object { $_ -match "--workdrive" })
 }
 
 $missingDrive = [char[]](67..90) | Where-Object { -not (Test-Path "$($_):\") } | Select-Object -First 1

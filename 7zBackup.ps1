@@ -358,6 +358,8 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                             Bug   : Cleanup files and folders that could not be removed for access denied were logged as ArgumentException
 #                                                     (PowerShell 5.1 Remove-Item): .NET deletes now name the real error. Read-only flags are cleared first
 #                                             Code  : Full cmdlet names (Where-Object, Select-Object, Sort-Object) instead of the aliases ?, select and sort
+#                                             Code  : Functions renamed to approved verbs: Invoke-PostAction, Test-CtrlCRequest, Test-FsAttribute,
+#                                                     New-Junction, New-SymLink, Assert-Arguments, Assert-Variables (were Do-, Check-, Make-, Validate-)
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -629,13 +631,13 @@ $helpText = @"
 #$attrNames = [enum]::getNames([System.IO.FileAttributes]);
 
 # -----------------------------------------------------------------------------
-# Function 		: Do-PostAction
+# Function 		: Invoke-PostAction
 # -----------------------------------------------------------------------------
 # Description	: Executes a job after execution
 # Returns       : 
 # Credits       : 
 # -----------------------------------------------------------------------------
-Function Do-PostAction {
+Function Invoke-PostAction {
 
 	# --------------------------------------------------------------------------------
 	# Execute post Action if we have any 
@@ -660,7 +662,7 @@ Function Do-PostAction {
 }
 
 # -----------------------------------------------------------------------------
-# Function 		: Check-CTRLCRequest
+# Function 		: Test-CtrlCRequest
 # -----------------------------------------------------------------------------
 # Description	: Checks whether or not the user hit CTRL + C to request
 #                 script cancel
@@ -668,7 +670,7 @@ Function Do-PostAction {
 # Returns       : $True / $False
 # Credits       : 
 # -----------------------------------------------------------------------------
-Function Check-CTRLCRequest {
+Function Test-CtrlCRequest {
 
 	If($MyContext.Cancelling -ne $True) {
 		If($Host.UI.RawUI.KeyAvailable -and [int]$Host.UI.RawUI.ReadKey("AllowCtrlC,IncludeKeyUp,NoEcho").Character -eq 3) {
@@ -684,7 +686,7 @@ Function Check-CTRLCRequest {
 
 
 # -----------------------------------------------------------------------------
-# Function 		: Check-FsAttribute
+# Function 		: Test-FsAttribute
 # -----------------------------------------------------------------------------
 # Description	: Checks for the presence of an attribute on a FileSystem object
 # Parameters    : [string]itemFullName - The name of the item to check
@@ -692,7 +694,7 @@ Function Check-CTRLCRequest {
 # Returns       : $True / $False
 # Credits       : http://scriptolog.blogspot.com/2007/10/file-attributes-helper-functions.html
 # -----------------------------------------------------------------------------
-Function Check-FsAttribute {
+Function Test-FsAttribute {
     param([string]$itemFullName = $(throw "You must provide an item name"),
 	      [string]$attrName = $(throw "You must provide an attribute name"))
 
@@ -799,14 +801,14 @@ Function IsValidIPAddress {
 }	
 
 # -----------------------------------------------------------------------------
-# Function 		: Make-Junction
+# Function 		: New-Junction
 # -----------------------------------------------------------------------------
 # Description	: Creates a Junction by the means of SysInternals' Junction.exe
 # Parameters    : [string]jPath    - Full path to the name of the junction
 #				  [string]jTarget  - Full path to the target 
 # Returns       : $True / $False
 # -----------------------------------------------------------------------------
-Function Make-Junction {
+Function New-Junction {
 	param(
 		[string]$jPath = $(throw "You must provide a path where to create the Junction"), 
 		[string]$jTarget = $(throw "You must provide a path to target")
@@ -842,7 +844,7 @@ Function Test-NetworkPath ([string]$path) {
 }
 
 # -----------------------------------------------------------------------------
-# Function 		: Make-SymLink
+# Function 		: New-SymLink
 # -----------------------------------------------------------------------------
 # Description	: Links a path to Target: a junction for a local target, a symbolic
 #				  link for a network target (only available for WinVer 6+)
@@ -850,7 +852,7 @@ Function Test-NetworkPath ([string]$path) {
 #				  [string]jTarget  - Full path to the target 
 # Returns       : $True / $False
 # -----------------------------------------------------------------------------
-Function Make-SymLink {
+Function New-SymLink {
 	param(
 		[string]$jPath = $(throw "You must provide a path where to create the Link"), 
 		[string]$jTarget = $(throw "You must provide a path to target")
@@ -924,7 +926,7 @@ Function PostArchiving {
 		Write-Progress -Activity "." -Status "." -Completed
 	}
 	If(
-		(Check-CTRLCRequest) -Or
+		(Test-CtrlCRequest) -Or
 		($BkDryRun)
 	) { Return; }
 
@@ -983,7 +985,7 @@ Function PostArchiving {
 	
 	If( !($BkCompressDetailItems) -Or
 	    ($BkCompressDetailItems.Count -eq 0) -Or
-		(Check-CTRLCRequest)
+		(Test-CtrlCRequest)
 	) { Return }
 	
 	# Remove  or clear files successfully archived if necessary
@@ -1005,7 +1007,7 @@ Function PostArchiving {
 	$archiveAttr = [System.IO.FileAttributes]::Archive
 	$readOnlyAttr = [System.IO.FileAttributes]::ReadOnly
 	foreach ($entry in $BkCompressDetailItems) {
-		If(Check-CTRLCRequest -eq $True) { break; }
+		If(Test-CtrlCRequest -eq $True) { break; }
 
 		# .NET calls, not Get-Item / Remove-Item: this loop runs once per archived item
 		$path = [System.IO.Path]::Combine($BkRootDir, $entry)
@@ -1117,7 +1119,7 @@ Function ProcessFolder ($thisFolder) {
 		$SWriters.Exclusions.WriteLine([string]("{0}`t{1}`t{2}`t{3}" -f $Counters.Exclusions++, "matchstoprecurse", "D", $thisFolder.RealName))
 	}
 	
-	If(Check-CTRLCRequest -eq $True) { return }
+	If(Test-CtrlCRequest -eq $True) { return }
 	# Early exit if we do not have to scan anything
 	If(!$scanThisPathForFiles -and !$scanThisPathForRecursion) { return }
 	
@@ -1248,7 +1250,7 @@ Function ProcessFolder ($thisFolder) {
 	}
 	
 	# Process Directories Within The Container
-	If($scanThisPathForRecursion -And (!(Check-CTRLCRequest -eq $True))) {
+	If($scanThisPathForRecursion -And (!(Test-CtrlCRequest -eq $True))) {
 		$childFolders = @($childItems | Where-Object { $_ -is [System.IO.DirectoryInfo] })
 		If($childFolders.Count) {
 			# Queue children right after this folder, in order. Skipped junctions take no slot
@@ -1739,13 +1741,13 @@ Function Trace-Progress ([string]$activity, [string]$operation, [string]$status)
 }
 
 # -----------------------------------------------------------------------------
-# Function 		: Validate-Arguments
+# Function 		: Assert-Arguments
 # -----------------------------------------------------------------------------
 # Description	: This function is used to check input arguments
 # Parameters    : None
 # Returns       : An array of error messages (if any)
 # -----------------------------------------------------------------------------
-Function Validate-Arguments {
+Function Assert-Arguments {
 
 	If($BkArguments.length -ne 0) {
 		$i = 0
@@ -1803,14 +1805,14 @@ Function Validate-Arguments {
 }
 
 # -----------------------------------------------------------------------------
-# Function 		: Validate-Variables
+# Function 		: Assert-Variables
 # -----------------------------------------------------------------------------
 # Description	: This function is used to check variables needed to execute
 #				  the script.
 # Parameters    : None
 # Returns       : An array of error messages (if any)
 # -----------------------------------------------------------------------------
-Function Validate-Variables {
+Function Assert-Variables {
 
 	# --------------------------------------------------------------------------------------------------------------------------
 	# Environment - Checks
@@ -1875,7 +1877,7 @@ Function Validate-Variables {
 		((Test-Variable "BkSelection") -eq $False) -or
 		($BkSelection -match "^\s*$") -or
 		((Test-Path $BkSelection -pathType Leaf) -eq $False) -or
-		(Check-FsAttribute $BkSelection "Directory")
+		(Test-FsAttribute $BkSelection "Directory")
 	)	{ Write-Output "Missing or invalid --selection argument. Must be an existent file" } 
 	Else 
 	{
@@ -1992,7 +1994,7 @@ Function Validate-Variables {
 		!($BkDestPath) -Or
 		($BkDestPath -match "^\s*$") -Or
 		!(Test-Path $BkDestPath -pathType Container) -Or
-		!(Check-FsAttribute $BkDestPath "Directory") -Or
+		!(Test-FsAttribute $BkDestPath "Directory") -Or
 		!(Test-Path-Writable $BkDestPath "File")
 	) { 
 		Write-Output ("Missing or invalid --destpath {0}." -f $BkDestPath) 
@@ -2361,8 +2363,8 @@ If((Test-Path $BkVarsImportScript -pathType Leaf )) {
 Set-Variable -Name hasErrors -Value $False -Scope Script
 Set-Variable -Name BkArguments -Value $args -Scope Script
 
-Validate-Arguments | ForEach-Object { $hasErrors = $True; Trace " Err : $_" }
-Validate-Variables | ForEach-Object { $hasErrors = $True; Trace " Err : $_" }
+Assert-Arguments | ForEach-Object { $hasErrors = $True; Trace " Err : $_" }
+Assert-Variables | ForEach-Object { $hasErrors = $True; Trace " Err : $_" }
 If($hasErrors) { Trace ("`n Try .\{0} --help `n" -f $MyInvocation.MyCommand.Name); $Counters.Criticals = 1; Send-Notification; Return }
 
 
@@ -2376,11 +2378,11 @@ Set-Variable -Name BkSources     -Value @{} -Scope Script
 
 Test-Lock | ForEach-Object { $hasErrors = $True; Trace " Err : $_" }
 New-RootDir | ForEach-Object { $hasErrors = $True; Trace " Err : $_" }
-Check-CTRLCRequest | Out-Null
+Test-CtrlCRequest | Out-Null
 
 If($hasErrors) { 
 	If(!($MyContext.Cancelling)) {
-		Do-PostAction
+		Invoke-PostAction
 		Send-Notification 
 	}
 	Clear-Script
@@ -2454,10 +2456,10 @@ $BkSelectionContents | Where-Object {$_ -imatch "^includesource=(.*)\|alias=(.*)
 			
 			If([int]$MyContext.WinVer[0] -lt 6 ) { 
 				# Create the new junction for Windows previous to vista
-				If(!(Make-Junction (Join-Path -Path $BkRootDir -ChildPath $alias) $target)) { Trace "   Failed to create Junction [$alias] to [$target]"} Else { $BkSources.Add($alias, $target) }
+				If(!(New-Junction (Join-Path -Path $BkRootDir -ChildPath $alias) $target)) { Trace "   Failed to create Junction [$alias] to [$target]"} Else { $BkSources.Add($alias, $target) }
 			} Else {
 				# Create the link for Windows Vista or newer: a junction for a local target
-				If(!(Make-SymLink (Join-Path -Path $BkRootDir -ChildPath $alias) $target)) { Trace "   Failed to create link [$alias] to [$target]"} Else { $BkSources.Add($alias, $target) }
+				If(!(New-SymLink (Join-Path -Path $BkRootDir -ChildPath $alias) $target)) { Trace "   Failed to create link [$alias] to [$target]"} Else { $BkSources.Add($alias, $target) }
 			}
 			
 		}
@@ -2471,7 +2473,7 @@ $BkSelectionContents | Where-Object {$_ -imatch "^includesource=(.*)\|alias=(.*)
 If(( $BkSources.Count -eq 0 )) {
 	Trace "   There are no selectable sources to backup. Quitting"
 	If(!($MyContext.Cancelling)) { 
-		Do-PostAction
+		Invoke-PostAction
 		Send-Notification 
 	}
 	Clear-Script
@@ -2642,7 +2644,7 @@ $BkSources.GetEnumerator() | ForEach-Object {
 
 # Walk through catalogFolders to process each one
 While ($True) {
-	If(Check-CTRLCRequest) {break}
+	If(Test-CtrlCRequest) {break}
 	ProcessFolder $catalogFolders[$catalogFoldersIndex] | Out-Null
 	If (!(++$catalogFoldersIndex -lt $catalogFolders.Count)) {Write-Progress -Activity "." -Status "." -Completed; break}
 }
@@ -2691,7 +2693,7 @@ Trace (" Performance  : {0,0:n2} files/sec " -f ( $Counters.FilesProcessed / $My
 
 
 # Early exit from the process if user cancel or there is nothingto backup
-If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
+If(($Counters.FilesSelected -lt 1) -or (Test-CtrlCRequest)) {
 
 	# Trace we have not selected anything to backup
 	Trace " "
@@ -2702,7 +2704,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 	Trace " "
 
 	If(!($MyContext.Cancelling)) { 
-		Do-PostAction
+		Invoke-PostAction
 		Send-Notification 
 	}
 	Clear-Script
@@ -2726,7 +2728,7 @@ If(($Counters.FilesSelected -lt 1) -or (Check-CTRLCRequest)) {
 		}
 	}
 	
-	If(!(Check-CTRLCRequest -eq $True)) {
+	If(!(Test-CtrlCRequest -eq $True)) {
 		# Do some stats (many thanks to http://www.hanselman.com/blog/ParsingCSVsAndPoorMansWebLogAnalysisWithPowerShell.aspx)
 		Write-Progress -Activity "Calculating Stats on Selection" -Status "Running ..." -CurrentOperation "Please Wait ..."
 		$statsByExtension = $Counters.Extensions.GetEnumerator() | Select-Object @{Name="Name";Expression={$_.Key}}, @{Name="Count";Expression={$_.Value[0]}}, @{Name="Size";Expression={$_.Value[1]}} | Sort-Object Size -desc
@@ -2901,7 +2903,7 @@ public class SevenZipOutput {
 			
 			
 			Write-Progress -Activity "Archiving into $BkDestFile" -Status $Status -CurrentOperation "Please wait ..."
-			If(Check-CTRLCRequest -eq $True) {
+			If(Test-CtrlCRequest -eq $True) {
 				[void]$oProcess.Kill()
 				While (!($oProcess.HasExited)) { Start-Sleep -Milliseconds 100 }
 				Set-Variable -Name Bk7ZipRetc -value ([int]255) -scope Script				# Force return code to 255
@@ -2964,7 +2966,7 @@ public class SevenZipOutput {
 
 		# Check exit code by 7zip - If ErrorLevel is <2 then we assume backup
 		# process completed successfully
-		If(($Bk7ZipRetc -lt 2) -and ($ArchiveSize -gt 0) -and !(Check-CTRLCRequest)) {
+		If(($Bk7ZipRetc -lt 2) -and ($ArchiveSize -gt 0) -and !(Test-CtrlCRequest)) {
 			
 			# Output informations in log file 
 			Trace (" Created      : {1} in {0} " -f $BkDestPath, $BkArchiveName)
@@ -2976,14 +2978,14 @@ public class SevenZipOutput {
 				
 			
 			# Do Post Archiving
-			If(!(Check-CTRLCRequest)) { PostArchiving ; }
+			If(!(Test-CtrlCRequest)) { PostArchiving ; }
 			
 			# Do rotation over backup files
 			# We have to list all files in the destination directory matching the same prefix and the same type
 			# list all items descending (by their creation date) and then delete the oldest out of
 			# the rotation range. If no rotation is defined then assume rotation period is 999 so we
 			# can easily have an output of archives on target media.
-			If(!(Check-CTRLCRequest)) {
+			If(!(Test-CtrlCRequest)) {
 				If(!(Test-Variable "BkRotate")) { Set-Variable -name "BkRotate" -value ([int]9999) -scope Script }
 				If(($BkRotate -ge 1)) {
 					$totalArchiveBytes = [int64]0
@@ -3078,8 +3080,8 @@ public class SevenZipOutput {
 	}
 	
 # If is set a list of notification addresses then proceed with email here
-if (!(Check-CTRLCRequest)) { 
-	Do-PostAction
+if (!(Test-CtrlCRequest)) { 
+	Invoke-PostAction
 	Send-Notification
 }
 

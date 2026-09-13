@@ -1,4 +1,4 @@
-# Integration test for the pre-Vista junction helpers (Make-Junction, Remove-Junction).
+# Integration test for the pre-Vista junction helpers (New-Junction, Remove-Junction).
 # Junction.exe (Sysinternals) is replaced by a small .cmd stand-in that creates
 # and removes a real junction with mklink /J and rd, receiving the same arguments.
 #
@@ -32,14 +32,14 @@ Set-Content -LiteralPath $BkJunctionBin -Encoding Ascii -Value @(
 
 $link = Join-Path $work "link"
 
-Write-Host "`n Case: Make-Junction"
+Write-Host "`n Case: New-Junction"
 Assert ($null -eq (Get-Variable -Name Target -ErrorAction SilentlyContinue)) "precondition, no `$Target variable the function could pick up by accident"
-$made = Make-Junction $link "$work\data"
-Assert ($made -eq $True)                                  "Make-Junction reports success"
+$made = New-Junction $link "$work\data"
+Assert ($made -eq $True)                                  "New-Junction reports success"
 Assert (Test-Path -LiteralPath "$link\precious.txt")      "the junction points to the given target"
 
 Write-Host "`n Case: Remove-Junction"
-# Own junction, so this case does not depend on Make-Junction
+# Own junction, so this case does not depend on New-Junction
 $link2 = Join-Path $work "link2"
 cmd /c "mklink /J `"$link2`" `"$work\data`"" | Out-Null
 Assert (Test-Path -LiteralPath "$link2\precious.txt")     "precondition, junction created"

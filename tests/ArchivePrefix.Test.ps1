@@ -1,4 +1,4 @@
-# Integration test for the archive prefix check in Validate-Variables.
+# Integration test for the archive prefix check in Assert-Variables.
 # The prefix becomes part of a file name: characters not allowed in file names
 # (including path separators, which could put the archive outside --destpath)
 # must be rejected.
@@ -25,14 +25,14 @@ New-Item -ItemType Directory "$work\dest", "$work\source" -Force | Out-Null
 $selection = Join-Path $work "selection.txt"
 Set-Content -LiteralPath $selection -Value "includesource=$work\source|alias=Source"
 
-# Runs Validate-Variables with an otherwise valid setup; returns the prefix errors only
+# Runs Assert-Variables with an otherwise valid setup; returns the prefix errors only
 Function Get-PrefixErrors ([string]$prefix) {
 	$script:MyContext       = [hashtable]::Synchronized(@{ PSVer = [int]$PSVersionTable.PSVersion.Major; WinVer = @("10"); Logger = (New-Object System.Text.StringBuilder) })
 	$script:BkType          = "full"
 	$script:BkSelection     = $selection
 	$script:BkDestPath      = "$work\dest"
 	$script:BkArchivePrefix = $prefix
-	Write-Output @(Validate-Variables | Where-Object { $_ -match "--prefix" })
+	Write-Output @(Assert-Variables | Where-Object { $_ -match "--prefix" })
 }
 
 Write-Host "`n Case: valid prefixes"

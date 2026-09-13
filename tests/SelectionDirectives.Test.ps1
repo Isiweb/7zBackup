@@ -1,4 +1,4 @@
-# Integration test for selection file directives read by Validate-Variables.
+# Integration test for selection file directives read by Assert-Variables.
 # maxfilesize, minfilesize, maxfileage, minfileage, compression, threads and
 # solid set in the selection file must reach the script, and take precedence
 # over command line values.
@@ -34,7 +34,7 @@ Set-Content -LiteralPath $selection -Value @(
 	"solid=0"
 )
 
-# State as after Validate-Arguments, with compression also given on the command line
+# State as after Assert-Arguments, with compression also given on the command line
 $MyContext            = [hashtable]::Synchronized(@{ PSVer = [int]$PSVersionTable.PSVersion.Major; WinVer = @("10"); Logger = (New-Object System.Text.StringBuilder) })
 $BkType               = "full"
 $BkSelection          = $selection
@@ -42,7 +42,7 @@ $BkDestPath           = "$work\dest"
 $BkArchivePrefix      = "test"
 $BkArchiveCompression = "9"
 
-$errors = @(Validate-Variables)
+$errors = @(Assert-Variables)
 
 Assert ($errors.Count -eq 0)             "no validation errors [$($errors -join ' | ')]"
 Assert ($BkMaxFileSize -eq 1000)         "maxfilesize=1000 is applied"
