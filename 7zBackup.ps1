@@ -350,6 +350,7 @@ $version = "2.1.5-Stable"  # 20260912 Anlan   Bug   : Move and clear archive bit
 #                                                     sources (UNC paths, network drives) still get symbolic links
 #                                             Bug   : While 7-Zip wrote the archive, progress read its size from the folder listing, which lags
 #                                                     for open files: it kept showing "Waiting for archive ..."
+#                                             Bug   : The log numbered selection exceptions one above their id in Selection-Excpt.csv
 
 # !! For a new version entry, copy the last entry down and modify Date, Author and Description
 #
@@ -1071,7 +1072,7 @@ Function ProcessFolder ($thisFolder) {
 				$folderToBeNuked | Remove-Item -Force -Recurse -ErrorVariable childDirRemoveError | Out-Null
 				If(-Not $?) {
 					$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childDirRemoveError.CategoryInfo.Reason, $childDirRemoveError.CategoryInfo.TargetName))	
-				    Trace (" Exception id {0} on {1} " -f $Counters.Exceptions, $thisFolder.RealName)
+				    Trace (" Exception id {0} on {1} " -f ($Counters.Exceptions - 1), $thisFolder.RealName)
 				}
 			} Else {
 				Trace (" Would remove {0} " -f $thisFolder.RealName)
@@ -1108,7 +1109,7 @@ Function ProcessFolder ($thisFolder) {
 	Catch { $childItemsScanError = $_.Exception.GetBaseException() }
 	If($childItemsScanError) {
 		$SWriters.Exceptions.WriteLine(("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childItemsScanError.GetType().Name, $thisFolder.RealName))
-		Trace (" Exception id {0} on {1} " -f $Counters.Exceptions, $thisFolder.RealName)
+		Trace (" Exception id {0} on {1} " -f ($Counters.Exceptions - 1), $thisFolder.RealName)
 	}
 
 	# Status
@@ -1152,7 +1153,7 @@ Function ProcessFolder ($thisFolder) {
 						Remove-Item -LiteralPath $childFile.FullName -Force -ErrorVariable childFileRemoveError | Out-Null
 						if (!$?) {
 							$SWriters.Exceptions.WriteLine([string]("{0}`t{1}`t{2}" -f $Counters.Exceptions++, $childFileRemoveError.CategoryInfo.Reason, $childFileRemoveError.CategoryInfo.TargetName))
-							Trace (" Exception id {0} on {1} " -f $Counters.Exceptions, $childFileRealName)
+							Trace (" Exception id {0} on {1} " -f ($Counters.Exceptions - 1), $childFileRealName)
 							continue
 						}
 					} Else {

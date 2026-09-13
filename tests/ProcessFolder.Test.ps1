@@ -198,6 +198,30 @@ icacls "$source\Parent\denied.txt" /remove:d "$env:USERNAME" | Out-Null
 [System.IO.File]::Delete("\\?\$source\Parent\C\$longName")
 Remove-Item -LiteralPath $work -Recurse -Force
 
+# -----------------------------------------------------------------------------
+Write-Host "`n Case: exception ids in the log match the ids in the exceptions file"
+$work   = New-WorkDir
+$source = Join-Path $work "source"
+New-Item -ItemType Directory "$source\ADenied", "$source\CleanDir" -Force | Out-Null
+Set-Content -LiteralPath "$source\locked.tmp" -Value "locked"
+Set-Content -LiteralPath "$source\CleanDir\locked.txt" -Value "locked"
+icacls "$source\ADenied" /deny "${env:USERNAME}:(RD)" | Out-Null
+# Files open without sharing cannot be deleted: matchcleanupfiles and matchcleanupdirs fail on them
+$lockedFile = [System.IO.File]::Open("$source\locked.tmp", "Open", "Read", "None")
+$lockedInDir = [System.IO.File]::Open("$source\CleanDir\locked.txt", "Open", "Read", "None")
+
+$BkType = "full"; $BkNoFollowJunctions = $False; $BkDryRun = $False; $matchcleanupfiles = '\.tmp$'; $matchcleanupdirs = '\\CleanDir$'; $matchexcludepath = $null
+$included   = @(Invoke-Scan $work $source)
+$lockedFile.Close(); $lockedInDir.Close()
+$fileIds = @(Get-Content -LiteralPath "$work\Exceptions.txt" | ForEach-Object { $_.Split("`t")[0] })
+$logIds  = @($MyContext.Logger.ToString().Split("`n") | Where-Object { $_ -match '^ Exception id (\d+) on ' } | ForEach-Object { $_ -replace '^ Exception id (\d+) on .*$', '$1' })
+Assert (($fileIds -join ",") -eq "0,1,2") "precondition, removal of a file, listing of a folder and removal of a folder fail [$($fileIds -join ',')]"
+Assert (($logIds -join ",") -eq ($fileIds -join ",")) "log ids match the exceptions file ids [log $($logIds -join ',') / file $($fileIds -join ',')]"
+
+$matchcleanupfiles = $null; $matchcleanupdirs = $null
+icacls "$source\ADenied" /remove:d "$env:USERNAME" | Out-Null
+Remove-Item -LiteralPath $work -Recurse -Force
+
 Write-Host ""
 If($Failures -gt 0) { Write-Host " $Failures assertion(s) failed" -ForegroundColor Red; exit 1 }
 Write-Host " All assertions passed" -ForegroundColor Green
