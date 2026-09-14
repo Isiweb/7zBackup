@@ -3,6 +3,10 @@
 Changes to 7zBackup.ps1, newest version first. Categories: Bug, Feat (feature), Code, Speed, Sec (security),
 Ui (user interface). Some old entries use Minor or New, or have no category.
 
+## Unreleased
+
+- Code: The help and log header link to the new repository address https://github.com/AndreaLanfranchi/7zBackup
+
 ## 2.1.5-Stable (2026-09-12, Anlan)
 
 - Bug: Move and clear archive bit acted also on files 7-Zip failed to store. Processed items are now read from the finished archive

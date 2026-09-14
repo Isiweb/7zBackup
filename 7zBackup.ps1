@@ -74,7 +74,7 @@ $headerText = @"
 
  ------------------------------------------------------------------------------
  
-  7zBackup.ps1 ver. $version (https://github.com/Isiweb/7zBackup)
+  7zBackup.ps1 ver. $version (https://github.com/AndreaLanfranchi/7zBackup)
   
  ------------------------------------------------------------------------------
  
