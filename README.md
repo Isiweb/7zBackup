@@ -58,6 +58,9 @@ Port 465 uses TLS on connect; with `--smtpssl` other ports require STARTTLS. If 
 * Easily manageable like a script is
 * Easily schedule your backup operations (using task scheduler)
 
+## Changelog
+See [CHANGELOG.md](CHANGELOG.md), newest version first.
+
 [//]: # (These are reference links used in the body of this note and get stripped out when the markdown processor does its job. There is no need to format nicely because it shouldn't be seen. Thanks SO - http://stackoverflow.com/questions/4823468/store-comments-in-markdown-syntax)
 
    [PowerShell]: <https://technet.microsoft.com/en-us/scriptcenter>
