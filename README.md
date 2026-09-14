@@ -31,7 +31,7 @@ It can help you cleaning up your directory structure from unwanted files ... in 
 ## System Requirements
 * Windows XP, Windows Vista or better, Windows 2003 or better. (Might also work on Windows 2000 but there is some work to do for having PowerShell running on that platform)
 * NTFS File System
-* [PowerShell] 2.0 or better
+* [PowerShell] 3.0 or better (tested with Windows PowerShell 5.1)
 * [7-Zip] 9.2.0 or newest
 * [SysInternals] Junction Tool v. 1.0.5 ( not required if running Windows Vista / 7 / 2008)
 * [MailKit] 4.x, optional, for notification emails (needs .NET Framework 4.6.2 or newer)
@@ -39,7 +39,7 @@ It can help you cleaning up your directory structure from unwanted files ... in 
 ## Notification emails with MailKit (optional)
 By default notification emails are sent with System.Net.Mail.SmtpClient, which can not use TLS on connect (port 465). To send them with [MailKit] instead:
 1. From NuGet, take the `MailKit` package and every package it depends on (for MailKit 4.17: MimeKit, BouncyCastle.Cryptography, System.Buffers, System.Formats.Asn1, System.Memory, System.Numerics.Vectors, System.Runtime.CompilerServices.Unsafe, System.Threading.Tasks.Extensions, System.ValueTuple).
-2. Copy the DLL in each package's `lib\net48` folder (or the closest older .NET Framework folder) into one folder.
+2. Copy the DLL in each package's folder for your .NET Framework into one folder: `lib\net48` for .NET Framework 4.8, `lib\net462` for 4.6.2 (e.g. Windows Server 2008 SP2), or the closest older .NET Framework folder the package has.
 3. Pass that folder with `--mailkitpath`, or set `BkMailKitPath` in 7zBackup-vars.ps1.
 
 Port 465 uses TLS on connect; with `--smtpssl` other ports require STARTTLS. If MailKit can not be loaded, a warning is logged and SmtpClient is used.
